@@ -20,6 +20,25 @@ export const getNextOccurrence = (ev: TimelineEvent, from: Date): Date => {
   return d;
 };
 
+export const getLastOccurrence = (ev: TimelineEvent, from: Date): Date => {
+  let y = from.getFullYear();
+  let d = new Date(y, ev.month - 1, ev.day, ev.hour || 0, ev.minute || 0, 0);
+  
+  // If the event for this year hasn't happened yet, the last one was last year
+  if (d > from) {
+    y--;
+    d = new Date(y, ev.month - 1, ev.day, ev.hour || 0, ev.minute || 0, 0);
+  }
+  return d;
+};
+
+export const getDaysDifference = (a: Date, b: Date): number => {
+  const oneDay = 1000 * 60 * 60 * 24;
+  // Use absolute difference
+  const diffInTime = Math.abs(b.getTime() - a.getTime());
+  return Math.floor(diffInTime / oneDay);
+};
+
 export const countOccurrences = (ev: TimelineEvent, base: Date, now: Date): number => {
   let c = 0;
   let y = base.getFullYear();
@@ -47,9 +66,9 @@ export const calculateTimeParts = (target: Date, now: Date): TimeParts => {
   let rem = s - months * secMon;
   const days = Math.floor(rem / secDay);
   rem -= days * secDay;
-  const hours = Math.floor(rem / 3600);
+  const hours = Math.floor(rem/3600);
   rem -= hours * 3600;
-  const minutes = Math.floor(rem / 60);
+  const minutes = Math.floor(rem/60);
   const seconds = rem - minutes * 60;
 
   return { months, days, hours, minutes, seconds };

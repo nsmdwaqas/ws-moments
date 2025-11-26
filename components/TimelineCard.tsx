@@ -1,64 +1,104 @@
 import React from 'react';
 import { TimelineEvent } from '../types';
-import { getNextOccurrence } from '../services/timeService';
-import { Calendar, Clock, Heart } from 'lucide-react';
+import { getNextOccurrence, getLastOccurrence, getDaysDifference, countOccurrences, getSuffix } from '../services/timeService';
+import { Calendar, Clock, History, RotateCw, Hourglass } from 'lucide-react';
+import { BASE_START_DATE } from '../constants';
 
 interface TimelineCardProps {
   event: TimelineEvent;
   isActive: boolean;
-  onClick: () => void;
 }
 
-export const TimelineCard: React.FC<TimelineCardProps> = ({ event, isActive, onClick }) => {
-  const nextDate = getNextOccurrence(event, new Date());
+export const TimelineCard: React.FC<TimelineCardProps> = ({ event, isActive }) => {
+  const now = new Date();
+  const nextDate = getNextOccurrence(event, now);
+  const lastDate = getLastOccurrence(event, now);
+  
+  const daysUntil = getDaysDifference(now, nextDate);
+  const daysPassed = getDaysDifference(lastDate, now);
+  
+  // Occurrences since base date (Aug 1, 2025)
+  // If the event hasn't happened relative to base yet, it might be 0.
+  // We want to show how many times it *has* happened or *will* happen.
+  // The logic "appeared once" usually means "since the start of relationship/base date".
+  const occurrences = countOccurrences(event, BASE_START_DATE, now);
+  
+  // If occurrences is 0, it means it hasn't happened since Aug 2025 yet.
+  // But maybe we want to show the count including the upcoming one? 
+  // Let's stick to "times occurred" as past tense.
   
   return (
     <div 
-      onClick={onClick}
       className={`
-        relative flex-shrink-0 w-[260px] sm:w-[300px] p-6 rounded-[32px] 
-        transition-all duration-500 ease-out cursor-pointer snap-center
+        relative w-[85vw] max-w-[360px] h-[480px] rounded-[40px] p-6 flex flex-col items-center text-center
+        transition-all duration-500 ease-out border
         ${isActive 
-          ? 'glass-card scale-100 opacity-100 z-10 shadow-xl border-white/80' 
-          : 'glass-panel scale-95 opacity-60 z-0 grayscale-[0.3] hover:opacity-80'}
+          ? 'glass-card border-white/60 shadow-[0_20px_50px_rgba(8,112,184,0.12)]' 
+          : 'bg-white/30 border-white/20 blur-[1px] opacity-80 scale-95'}
       `}
     >
       {/* Icon Bubble */}
       <div className={`
-        w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mb-4 shadow-sm
-        transition-colors duration-300
-        ${isActive ? 'bg-rose-100 text-rose-500' : 'bg-gray-100 text-gray-400'}
+        w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mb-6 shadow-lg shadow-rose-500/10
+        transition-all duration-500
+        ${isActive ? 'bg-gradient-to-br from-white to-rose-50 scale-100' : 'bg-white/50 scale-90 grayscale'}
       `}>
         {event.icon}
       </div>
 
-      <div className="space-y-1">
-        <h3 className={`font-serif text-xl font-medium transition-colors ${isActive ? 'text-gray-900' : 'text-gray-600'}`}>
+      <div className="space-y-2 mb-8">
+        <h3 className="font-serif text-3xl text-slate-900 leading-tight">
           {event.title}
         </h3>
-        <p className="text-sm text-gray-500 font-medium tracking-wide">
+        <p className="text-slate-500 font-medium">
            {nextDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
         </p>
       </div>
 
-      <div className="mt-6 pt-4 border-t border-gray-200/50 flex items-center justify-between text-xs text-gray-500 font-medium uppercase tracking-wider">
-        <div className="flex items-center gap-1">
-           <Calendar size={12} />
-           <span>Annual</span>
+      {/* Stats Grid */}
+      <div className="w-full grid grid-cols-2 gap-3 mt-auto">
+        
+        {/* Days To Go */}
+        <div className="col-span-2 bg-rose-50/50 rounded-2xl p-4 border border-rose-100/50">
+           <div className="flex items-center justify-center gap-2 text-rose-400 mb-1">
+             <Hourglass size={14} />
+             <span className="text-[10px] uppercase tracking-widest font-bold">Countdown</span>
+           </div>
+           <div className="text-2xl font-bold text-slate-800">
+             {daysUntil} <span className="text-sm font-medium text-slate-500">Days to go</span>
+           </div>
         </div>
-        {event.hour !== undefined && (
-          <div className="flex items-center gap-1">
-            <Clock size={12} />
-            <span>{String(event.hour).padStart(2,'0')}:{String(event.minute).padStart(2,'0')}</span>
-          </div>
-        )}
+
+        {/* Days Passed */}
+        <div className="bg-white/40 rounded-2xl p-4 border border-white/50 flex flex-col justify-between">
+           <div className="flex items-center justify-center gap-1.5 text-slate-400 mb-2">
+             <History size={14} />
+             <span className="text-[10px] uppercase tracking-wider font-semibold">Passed</span>
+           </div>
+           <div className="text-lg font-bold text-slate-700 leading-none">
+             {daysPassed}
+             <span className="block text-[10px] font-medium text-slate-400 mt-1">days ago</span>
+           </div>
+        </div>
+
+        {/* Occurrence Count */}
+        <div className="bg-white/40 rounded-2xl p-4 border border-white/50 flex flex-col justify-between">
+           <div className="flex items-center justify-center gap-1.5 text-slate-400 mb-2">
+             <RotateCw size={14} />
+             <span className="text-[10px] uppercase tracking-wider font-semibold">Occurred</span>
+           </div>
+           <div className="text-lg font-bold text-slate-700 leading-none">
+             {occurrences}<span className="text-xs align-top">{getSuffix(occurrences)}</span>
+             <span className="block text-[10px] font-medium text-slate-400 mt-1">time</span>
+           </div>
+        </div>
+
       </div>
 
-      {isActive && (
-        <div className="absolute top-4 right-4">
-          <Heart className="text-rose-400 fill-rose-400 animate-pulse-slow" size={18} />
-        </div>
-      )}
+      <div className="mt-6 flex items-center justify-center gap-2 text-[10px] text-slate-400 font-medium uppercase tracking-widest">
+         <Clock size={12} />
+         <span>{String(event.hour).padStart(2,'0')}:{String(event.minute).padStart(2,'0')}</span>
+      </div>
     </div>
   );
 };

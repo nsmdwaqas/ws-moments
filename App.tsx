@@ -1,106 +1,97 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Background } from './components/Background';
 import { CountdownGrid } from './components/CountdownGrid';
 import { TimelineCard } from './components/TimelineCard';
 import { EVENTS, BASE_START_DATE } from './constants';
 import { getUpcomingEvent, calculateTimeParts, countOccurrences, getSuffix } from './services/timeService';
 import { TimelineEvent, TimeParts } from './types';
-import { Heart, Music, Volume2, VolumeX } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Heart, ChevronLeft, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
+
+// Infinite Carousel Logic Helpers
+const wrap = (min: number, max: number, v: number) => {
+  const rangeSize = max - min;
+  return ((((v - min) % rangeSize) + rangeSize) % rangeSize) + min;
+};
 
 const App: React.FC = () => {
   const [now, setNow] = useState(new Date());
   const [upcoming, setUpcoming] = useState<{ upcomingEvent: TimelineEvent | null, upcomingDate: Date | null }>({ upcomingEvent: null, upcomingDate: null });
   const [timeParts, setTimeParts] = useState<TimeParts>({ months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 });
-  const [activeIndex, setActiveIndex] = useState(0);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  
+  // Carousel State
+  const [page, setPage] = useState(0);
 
-  // Update timer every second
+  // Initialize and Timer
   useEffect(() => {
-    const timer = setInterval(() => {
-      const currentNow = new Date();
-      setNow(currentNow);
-      
-      const next = getUpcomingEvent(EVENTS, currentNow);
-      setUpcoming(next);
-      
-      if (next.upcomingDate) {
-        setTimeParts(calculateTimeParts(next.upcomingDate, currentNow));
-      }
-    }, 1000);
-
-    // Initial calculation
+    // Find initial upcoming event to set the carousel index
     const initialNow = new Date();
     const next = getUpcomingEvent(EVENTS, initialNow);
     setUpcoming(next);
     if(next.upcomingDate) setTimeParts(calculateTimeParts(next.upcomingDate, initialNow));
 
+    if (next.upcomingEvent) {
+      const idx = EVENTS.findIndex(e => e.id === next.upcomingEvent?.id);
+      if (idx !== -1) setPage(idx);
+    }
+
+    const timer = setInterval(() => {
+      const currentNow = new Date();
+      setNow(currentNow);
+      
+      const nextUpdate = getUpcomingEvent(EVENTS, currentNow);
+      setUpcoming(nextUpdate);
+      
+      if (nextUpdate.upcomingDate) {
+        setTimeParts(calculateTimeParts(nextUpdate.upcomingDate, currentNow));
+      }
+    }, 1000);
+
     return () => clearInterval(timer);
   }, []);
-
-  // Sync active index with scroll
-  const handleScroll = () => {
-    if (scrollContainerRef.current) {
-      const scrollLeft = scrollContainerRef.current.scrollLeft;
-      const width = scrollContainerRef.current.offsetWidth; // Viewport width
-      const cardWidth = 300; // Approx card width + gap
-      // Simple logic to find center element
-      const center = scrollLeft + (width / 2);
-      const index = Math.floor(center / cardWidth); 
-      // This is a rough approximation, for better snapping we rely on CSS snap-x
-      // but to highlight the state we need to know roughly where we are.
-      // A better way for React state:
-      const cardElements = scrollContainerRef.current.children;
-      let minDiff = Infinity;
-      let bestIndex = 0;
-      
-      for(let i=0; i<cardElements.length; i++) {
-        const card = cardElements[i] as HTMLElement;
-        const rect = card.getBoundingClientRect();
-        const containerRect = scrollContainerRef.current.getBoundingClientRect();
-        const diff = Math.abs((rect.left + rect.width/2) - (containerRect.left + containerRect.width/2));
-        if(diff < minDiff) {
-          minDiff = diff;
-          bestIndex = i;
-        }
-      }
-      if(bestIndex !== activeIndex) setActiveIndex(bestIndex);
-    }
-  };
 
   const occurrenceCount = upcoming.upcomingEvent 
     ? countOccurrences(upcoming.upcomingEvent, BASE_START_DATE, now) + 1
     : 0;
 
+  // Carousel Render Logic
+  const eventIndex = wrap(0, EVENTS.length, page);
+  
+  // Drag handling
+  const x = useMotionValue(0);
+  const inputRange = [-200, 0, 200];
+  const opacityOutputRange = [0.5, 1, 0.5];
+  const scaleOutputRange = [0.8, 1, 0.8];
+  
+  const opacity = useTransform(x, inputRange, opacityOutputRange);
+  const scale = useTransform(x, inputRange, scaleOutputRange);
+
+  const paginate = (newDirection: number) => {
+    setPage(page + newDirection);
+  };
+
   return (
-    <div className="relative min-h-screen text-slate-800 font-sans selection:bg-rose-200">
+    <div className="relative min-h-screen text-slate-800 font-sans selection:bg-rose-200 overflow-x-hidden">
       <Background />
 
-      <main className="relative z-10 max-w-2xl mx-auto flex flex-col min-h-screen pb-10">
+      <main className="relative z-10 w-full flex flex-col min-h-screen pb-6">
         
-        {/* Header / Branding */}
-        <header className="pt-8 px-6 flex justify-between items-center">
+        {/* Header */}
+        <header className="pt-8 px-6 flex justify-center items-center max-w-2xl mx-auto w-full text-center">
            <div className="flex flex-col">
              <span className="font-serif italic text-2xl text-rose-500">Waqas & Safiyya</span>
              <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mt-1">Forever since 2025</span>
            </div>
-           <button 
-             onClick={() => setIsPlaying(!isPlaying)}
-             className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-slate-600 hover:text-rose-500 transition-colors"
-           >
-             {isPlaying ? <Volume2 size={18} /> : <VolumeX size={18} />}
-           </button>
         </header>
 
         {/* Hero Section */}
-        <section className="mt-10 px-6 text-center">
+        <section className="mt-8 px-6 text-center max-w-2xl mx-auto w-full">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
           >
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/40 border border-white/50 mb-6 backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/40 border border-white/50 mb-6 backdrop-blur-md shadow-sm">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
@@ -131,7 +122,7 @@ const App: React.FC = () => {
 
             <CountdownGrid parts={timeParts} />
 
-            <div className="mt-8 text-sm text-slate-500 bg-white/30 inline-block px-4 py-2 rounded-xl backdrop-blur-sm border border-white/40">
+            <div className="mt-8 text-sm text-slate-500 bg-white/30 inline-block px-4 py-2 rounded-xl backdrop-blur-sm border border-white/40 shadow-sm">
                This will be the <span className="font-bold text-rose-500">{occurrenceCount}{getSuffix(occurrenceCount)}</span> time since our journey began.
             </div>
           </motion.div>
@@ -140,41 +131,60 @@ const App: React.FC = () => {
         {/* Spacer */}
         <div className="flex-grow"></div>
 
-        {/* Timeline Section */}
-        <section className="mt-12 mb-6">
-          <div className="px-6 mb-4 flex items-end justify-between">
+        {/* Infinite Carousel Section */}
+        <section className="mt-10 mb-8 w-full overflow-hidden">
+          <div className="px-6 mb-6 flex items-end justify-between max-w-2xl mx-auto w-full">
             <div>
               <h2 className="text-2xl font-serif text-slate-800">Our Memories</h2>
-              <p className="text-xs uppercase tracking-widest text-slate-500 mt-1">Swipe to explore</p>
-            </div>
-            <div className="hidden sm:flex gap-1">
-               {EVENTS.map((_, idx) => (
-                 <div key={idx} className={`h-1.5 rounded-full transition-all duration-300 ${idx === activeIndex ? 'w-6 bg-rose-400' : 'w-1.5 bg-gray-300'}`} />
-               ))}
+              <p className="text-xs uppercase tracking-widest text-slate-500 mt-1">Swipe for infinity</p>
             </div>
           </div>
 
-          <div 
-            ref={scrollContainerRef}
-            onScroll={handleScroll}
-            className="flex overflow-x-auto snap-x snap-mandatory gap-4 px-6 pb-8 pt-4 no-scrollbar items-center"
-            style={{ scrollBehavior: 'smooth' }}
-          >
-            {EVENTS.map((ev, index) => (
-              <TimelineCard 
-                key={ev.id} 
-                event={ev} 
-                isActive={index === activeIndex} 
-                onClick={() => {
-                  setActiveIndex(index);
-                  const el = scrollContainerRef.current?.children[index] as HTMLElement;
-                  el?.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+          <div className="relative h-[500px] w-full flex items-center justify-center overflow-visible">
+             {/* Center Card (Active) */}
+             <motion.div
+                className="absolute z-20 cursor-grab active:cursor-grabbing touch-pan-y"
+                style={{ x, opacity, scale }}
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.2}
+                onDragEnd={(e, { offset, velocity }) => {
+                  const swipe = Math.abs(offset.x) * velocity.x;
+                  if (swipe < -100 || offset.x < -100) {
+                    paginate(1);
+                  } else if (swipe > 100 || offset.x > 100) {
+                    paginate(-1);
+                  }
                 }}
+             >
+                <TimelineCard event={EVENTS[eventIndex]} isActive={true} />
+             </motion.div>
+
+             {/* Background Cards (Previews) */}
+             <div className="absolute z-10 opacity-40 scale-90 -translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
+               <TimelineCard event={EVENTS[wrap(0, EVENTS.length, page - 1)]} isActive={false} />
+             </div>
+             <div className="absolute z-10 opacity-40 scale-90 translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
+               <TimelineCard event={EVENTS[wrap(0, EVENTS.length, page + 1)]} isActive={false} />
+             </div>
+             
+             {/* Mobile Hint Arrows */}
+             <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none sm:hidden z-0 opacity-20">
+               <ChevronLeft size={32} />
+               <ChevronRight size={32} />
+             </div>
+          </div>
+          
+          {/* Pagination Dots */}
+          <div className="flex justify-center gap-2 mt-2">
+            {EVENTS.map((_, i) => (
+              <div 
+                key={i} 
+                className={`h-1.5 rounded-full transition-all duration-300 ${i === eventIndex ? 'w-6 bg-rose-400' : 'w-1.5 bg-gray-300'}`}
               />
             ))}
-            {/* Padding element for right side scroll */}
-            <div className="w-2 flex-shrink-0" />
           </div>
+
         </section>
 
         {/* Footer */}
@@ -187,15 +197,6 @@ const App: React.FC = () => {
         </footer>
 
       </main>
-
-      {/* Decorative floating audio player mock */}
-      {isPlaying && (
-         <div className="fixed bottom-6 right-6 z-50">
-            <div className="glass-card p-3 rounded-full animate-bounce">
-              <Music className="text-rose-500" size={20} />
-            </div>
-         </div>
-      )}
     </div>
   );
 };
