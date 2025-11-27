@@ -29,9 +29,6 @@
               400: '#fb7185',
               500: '#f43f5e',
             },
-            glass: {
-              border: 'rgba(255, 255, 255, 0.5)',
-            }
           }
         }
       }
@@ -54,32 +51,26 @@
       margin: 0;
       -webkit-font-smoothing: antialiased;
       -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden; /* Prevent horizontal scrollbar on mobile */
     }
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     
     .glass-panel {
-      background: rgba(255, 255, 255, 0.35);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.4);
+      background: rgba(255, 255, 255, 0.45);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
     }
     
-    /* Optimized for Mobile: Removes Blur to prevent blank screens */
-    .force-gpu {
-      transform: translate3d(0,0,0);
-      -webkit-transform: translate3d(0,0,0);
-      backface-visibility: hidden;
-      -webkit-backface-visibility: hidden;
-      will-change: transform, opacity;
-      perspective: 1000px;
-    }
-
     /* Specific Lock Screen Styles */
     .lock-input::placeholder {
       color: #cbd5e1;
       font-weight: 400;
       letter-spacing: normal;
+    }
+
+    /* Mobile Background Fallback (Lightweight) */
+    .mobile-bg {
+      background: radial-gradient(circle at 50% 30%, #fff1f2 0%, #fff5f7 100%);
     }
   </style>
 </head>
@@ -120,7 +111,6 @@
     const ChevronRightIcon = ({ size }) => (
       <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
     );
-    // Custom Lock Icons to match design
     const LockIcon = ({ size, className }) => (
       <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
         <rect x="5" y="11" width="14" height="10" rx="2" ry="2" />
@@ -152,7 +142,6 @@
       { id: "first-words", title: "The First Words", month: 10, day: 10, hour: 22, minute: 40, icon: "🗣️", description: "When silence turned into a story." }
     ];
 
-    // Islamic Events Configuration
     const ISLAMIC_CONFIG = [
       { id: "islamic-new-year", title: "Islamic New Year", hijriMonth: 1, hijriDay: 1, icon: "🌙", description: "1st Muharram - A new spiritual year." },
       { id: "ramadan", title: "1st Ramadan", hijriMonth: 9, hijriDay: 1, icon: "📿", description: "The holy month of fasting begins." },
@@ -162,7 +151,6 @@
       { id: "shab-barat", title: "Shab-e-Barat", hijriMonth: 8, hijriDay: 15, icon: "🤲", description: "15th Shaban - The night of forgiveness." }
     ];
 
-    // Fallback Dates for 2025/2026 if API fails
     const FALLBACK_ISLAMIC_DATES = {
       "islamic-new-year": "2025-06-26",
       "ramadan": "2025-03-01",
@@ -373,17 +361,20 @@
     // --- COMPONENTS ---
     const Background = () => {
       return (
-        <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden bg-[#fff5f7]">
-          <motion.div 
-            animate={{ y: [0, -40, 0], x: [0, 20, 0], scale: [1, 1.1, 1] }}
-            transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute -top-20 -left-20 w-96 h-96 bg-rose-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-40 force-gpu"
-          />
-          <motion.div 
-            animate={{ y: [0, 50, 0], x: [0, -30, 0], scale: [1, 1.2, 1] }}
-            transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-            className="absolute -bottom-32 -right-32 w-[30rem] h-[30rem] bg-pink-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-50 force-gpu"
-          />
+        <div className="fixed inset-0 w-full h-full -z-10 mobile-bg">
+          {/* Animated Blobs only for Desktop (sm:block) to save Mobile GPU Memory */}
+          <div className="hidden sm:block absolute inset-0 overflow-hidden">
+            <motion.div 
+              animate={{ y: [0, -40, 0], x: [0, 20, 0], scale: [1, 1.1, 1] }}
+              transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute -top-20 -left-20 w-96 h-96 bg-rose-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-40"
+            />
+            <motion.div 
+              animate={{ y: [0, 50, 0], x: [0, -30, 0], scale: [1, 1.2, 1] }}
+              transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+              className="absolute -bottom-32 -right-32 w-[30rem] h-[30rem] bg-pink-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-50"
+            />
+          </div>
         </div>
       );
     };
@@ -540,7 +531,7 @@
       );
     };
 
-    // Updated Timeline Card with High-Performance Mobile Styles
+    // Updated Timeline Card with simplified structure to prevent mobile rendering crashes
     const TimelineCard = ({ event, isActive }) => {
       if (!event) return null;
       
@@ -565,28 +556,22 @@
         dateDisplay = "Loading...";
       }
       
-      // CRITICAL FIX FOR MOBILE:
-      // Mobile browsers crash with backdrop-filter inside motion transforms.
-      // Use high-opacity solid bg (bg-white/95) on mobile. Use blur only on desktop (sm:).
+      // Removed complex transforms and will-change to prevent memory exhaustion
       const activeClass = isActive 
         ? 'bg-white/95 sm:bg-white/65 sm:backdrop-blur-xl shadow-[0_20px_50px_rgba(8,112,184,0.12)] scale-100 opacity-100 border-white/60' 
-        : 'bg-white/40 border-white/20 opacity-80 scale-95';
+        : 'bg-white/60 border-white/20 opacity-80 scale-95';
 
       return (
         <div 
           className={`
-            relative w-[85vw] max-w-[360px] h-[480px] rounded-[40px] p-6 flex flex-col items-center text-center
-            transition-all duration-500 ease-out border force-gpu
+            relative w-full max-w-[340px] h-[480px] rounded-[40px] p-6 flex flex-col items-center text-center
+            border transition-all duration-300
             ${activeClass}
           `}
-          style={{ 
-            WebkitBackfaceVisibility: 'hidden',
-            WebkitTransform: 'translate3d(0,0,0)'
-          }}
         >
           <div className={`
             w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mb-6 shadow-lg shadow-rose-500/10
-            transition-transform duration-500
+            transition-transform duration-300
             ${isActive ? 'bg-gradient-to-br from-white to-rose-50 scale-100' : 'bg-white/50 scale-90 grayscale'}
           `}>
             {event.icon}
@@ -656,7 +641,7 @@
       const x = useMotionValue(0);
       const inputRange = [-200, 0, 200];
       const opacity = useTransform(x, inputRange, [0.5, 1, 0.5]);
-      const scale = useTransform(x, inputRange, [0.8, 1, 0.8]);
+      const scale = useTransform(x, inputRange, [0.85, 1, 0.85]);
 
       const paginate = (newDirection) => {
         setPage(page + newDirection);
@@ -750,7 +735,7 @@
 
                 <div className="relative h-[500px] w-full flex items-center justify-center overflow-visible" style={{ isolation: 'isolate' }}>
                    <motion.div
-                      className="absolute z-20 cursor-grab active:cursor-grabbing touch-pan-y"
+                      className="absolute z-20 cursor-grab active:cursor-grabbing touch-pan-y w-full flex justify-center items-center"
                       style={{ x, opacity, scale }}
                       drag="x"
                       dragConstraints={{ left: 0, right: 0 }}
@@ -767,10 +752,10 @@
                       <TimelineCard key={activeEvent.id} event={activeEvent} isActive={true} />
                    </motion.div>
 
-                   <div className="absolute z-10 opacity-40 scale-90 -translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500 force-gpu">
+                   <div className="absolute z-10 opacity-40 scale-90 -translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
                      <TimelineCard key={prevEvent.id} event={prevEvent} isActive={false} />
                    </div>
-                   <div className="absolute z-10 opacity-40 scale-90 translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500 force-gpu">
+                   <div className="absolute z-10 opacity-40 scale-90 translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
                      <TimelineCard key={nextEvent.id} event={nextEvent} isActive={false} />
                    </div>
                    
