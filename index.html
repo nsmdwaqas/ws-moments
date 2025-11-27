@@ -644,58 +644,84 @@
       return ((((v - min) % rangeSize) + rangeSize) % rangeSize) + min;
     };
 
-    // --- NEW: ISOLATED CAROUSEL COMPONENT ---
-    // This component is strictly memoized. It DOES NOT re-render when the timer ticks.
-    // It only re-renders when `page` or `allEvents` changes.
+    // --- NEW: VIRTUAL SLIDER CAROUSEL (AnimatePresence) ---
+    // This architecture creates a FRESH component on every slide,
+    // which fixes the "Blank/Stuck" card issue on mobile browsers.
+    const variants = {
+      enter: (direction) => ({
+        x: direction > 0 ? 300 : -300,
+        opacity: 0,
+        scale: 0.8,
+        zIndex: 0
+      }),
+      center: {
+        zIndex: 1,
+        x: 0,
+        opacity: 1,
+        scale: 1
+      },
+      exit: (direction) => ({
+        zIndex: 0,
+        x: direction < 0 ? 300 : -300,
+        opacity: 0,
+        scale: 0.8
+      })
+    };
+
     const MemoryCarousel = memo(({ allEvents, page, setPage }) => {
+      // We track direction to know if we should slide left or right
+      const prevPage = useRef(page);
+      const direction = page > prevPage.current ? 1 : -1;
+      
+      // Update ref after render logic
+      if (page !== prevPage.current) {
+         prevPage.current = page;
+      }
+
       const eventIndex = wrap(0, allEvents.length, page);
       const activeEvent = allEvents[eventIndex];
-      const prevEvent = allEvents[wrap(0, allEvents.length, page - 1)];
-      const nextEvent = allEvents[wrap(0, allEvents.length, page + 1)];
-
-      const x = useMotionValue(0);
-      const inputRange = [-200, 0, 200];
-      const opacity = useTransform(x, inputRange, [0.5, 1, 0.5]);
-      const scale = useTransform(x, inputRange, [0.85, 1, 0.85]);
-
+      
       const paginate = (newDirection) => {
         setPage(page + newDirection);
       };
 
       return (
-        <div className="relative h-[500px] w-full flex items-center justify-center overflow-visible" style={{ isolation: 'isolate', touchAction: 'pan-y' }}>
-             <motion.div
-                className="absolute z-20 cursor-grab active:cursor-grabbing w-full flex justify-center items-center"
-                style={{ x, opacity, scale }}
-                drag="x"
-                dragConstraints={{ left: 0, right: 0 }}
-                dragElastic={0.2}
-                onDragEnd={(e, { offset, velocity }) => {
-                  const swipe = Math.abs(offset.x) * velocity.x;
-                  if (swipe < -100 || offset.x < -100) {
-                    paginate(1);
-                  } else if (swipe > 100 || offset.x > 100) {
-                    paginate(-1);
-                  }
-                }}
-                // Key prop is critical here for React to treat this as stable
-                key={activeEvent ? activeEvent.id : 'empty'}
-             >
-                <TimelineCard event={activeEvent} isActive={true} />
-             </motion.div>
-
-             <div className="absolute z-10 opacity-40 scale-90 -translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
-               <TimelineCard event={prevEvent} isActive={false} />
-             </div>
-             <div className="absolute z-10 opacity-40 scale-90 translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
-               <TimelineCard event={nextEvent} isActive={false} />
-             </div>
-             
-             <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none sm:hidden z-0 opacity-20">
+        <div className="relative h-[500px] w-full flex items-center justify-center overflow-hidden" style={{ touchAction: 'pan-y' }}>
+          <AnimatePresence initial={false} custom={direction} mode="popLayout">
+            <motion.div
+              key={page}
+              custom={direction}
+              variants={variants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{
+                x: { type: "spring", stiffness: 300, damping: 30 },
+                opacity: { duration: 0.2 }
+              }}
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={1}
+              onDragEnd={(e, { offset, velocity }) => {
+                const swipe = Math.abs(offset.x) * velocity.x;
+                if (swipe < -10000 || offset.x < -100) {
+                  paginate(1);
+                } else if (swipe > 10000 || offset.x > 100) {
+                  paginate(-1);
+                }
+              }}
+              className="absolute w-full flex justify-center items-center cursor-grab active:cursor-grabbing"
+              style={{ backfaceVisibility: 'hidden' }}
+            >
+              <TimelineCard event={activeEvent} isActive={true} />
+            </motion.div>
+          </AnimatePresence>
+          
+           <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none z-0 opacity-20 sm:hidden">
                <ChevronLeftIcon size={32} />
                <ChevronRightIcon size={32} />
-             </div>
-          </div>
+           </div>
+        </div>
       );
     });
 
