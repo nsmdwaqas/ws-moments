@@ -288,32 +288,34 @@
 
     // API Fetcher for Islamic Dates (Robust with Fallback)
     const fetchIslamicEvents = async () => {
+      const today = new Date();
+      let currentHijriYear = 1446; // Default safe year
+
+      // 1. Try to get the real current Hijri Year
       try {
-        const today = new Date();
-        let currentHijriYear;
-        
-        try {
-          const gToHRes = await fetch(`https://api.aladhan.com/v1/gToH?date=${pad2(today.getDate())}-${pad2(today.getMonth() + 1)}-${today.getFullYear()}`);
-          if (!gToHRes.ok) throw new Error("Hijri date fetch failed");
+        const gToHRes = await fetch(`https://api.aladhan.com/v1/gToH?date=${pad2(today.getDate())}-${pad2(today.getMonth() + 1)}-${today.getFullYear()}`);
+        if (gToHRes.ok) {
           const gToHData = await gToHRes.json();
           currentHijriYear = parseInt(gToHData.data.hijri.year);
-        } catch (e) {
-          console.warn("Hijri Year fetch failed, defaulting to 1446", e);
-          currentHijriYear = 1446;
         }
+      } catch (e) {
+        console.warn("Hijri Year fetch failed, defaulting to 1446", e);
+      }
 
-        const results = await Promise.allSettled(ISLAMIC_CONFIG.map(async (config) => {
-          // Fetch for current hijri year
+      // 2. Fetch each event individually so one failure doesn't break others
+      const promises = ISLAMIC_CONFIG.map(async (config) => {
+        try {
           const targetHijriDate = `${pad2(config.hijriDay)}-${pad2(config.hijriMonth)}-${currentHijriYear}`;
           let res = await fetch(`https://api.aladhan.com/v1/hToG?date=${targetHijriDate}`);
-          if (!res.ok) throw new Error("Event date fetch failed");
+          
+          if (!res.ok) throw new Error(`API error for ${config.id}`);
           let data = await res.json();
           
           // Parse "DD-MM-YYYY" manually to be safe on all browsers
           const [dStr, mStr, yStr] = data.data.gregorian.date.split('-');
           let gregDate = new Date(parseInt(yStr), parseInt(mStr) - 1, parseInt(dStr));
           
-          // Event logic
+          // If this date has already passed for this year, try next Hijri year
           const eventEndBuffer = new Date(gregDate);
           eventEndBuffer.setDate(eventEndBuffer.getDate() + 1);
           eventEndBuffer.setHours(23, 59, 59);
@@ -336,35 +338,31 @@
             hour: 9, 
             minute: 0
           };
-        }));
 
-        const fetchedEvents = results
-          .filter(r => r.status === 'fulfilled')
-          .map(r => r.value);
+        } catch (e) {
+          // 3. Fallback logic: If API fails for THIS event, use fallback
+          console.warn(`Failed to fetch ${config.id}, using fallback.`, e);
           
-        // If API completely failed (returned 0 events), use fallback
-        if (fetchedEvents.length === 0) {
-           throw new Error("No events fetched");
-        }
-        
-        return fetchedEvents;
-
-      } catch (e) {
-        console.warn("Failed to fetch Islamic dates, using static fallbacks.", e);
-        // Use Fallback Dates
-        return ISLAMIC_CONFIG.map(config => {
-           const fallbackStr = FALLBACK_ISLAMIC_DATES[config.id];
-           if (!fallbackStr) return null;
-           const d = new Date(fallbackStr);
-           d.setHours(9,0,0,0);
-           return {
+          const fallbackStr = FALLBACK_ISLAMIC_DATES[config.id];
+          if (!fallbackStr) return null;
+          
+          const d = new Date(fallbackStr);
+          d.setHours(9,0,0,0);
+          
+          // Note: If fallback date is in past, it will just show as "past" or user has to update constant manually next year.
+          // This is a safety net.
+          return {
              ...config,
              dynamicDate: d,
              hour: 9,
              minute: 0
-           }
-        }).filter(e => e !== null);
-      }
+           };
+        }
+      });
+
+      const results = await Promise.all(promises);
+      // Filter out any nulls (shouldn't happen given fallback, but safe to do)
+      return results.filter(e => e !== null);
     };
 
     // --- COMPONENTS ---
