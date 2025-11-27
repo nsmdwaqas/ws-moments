@@ -51,7 +51,7 @@
       margin: 0;
       -webkit-font-smoothing: antialiased;
       -webkit-tap-highlight-color: transparent;
-      overflow-x: hidden; /* Prevent horizontal scrollbar on mobile */
+      overflow-x: hidden;
     }
     
     .glass-panel {
@@ -72,13 +72,14 @@
     .mobile-bg {
       background: radial-gradient(circle at 50% 30%, #fff1f2 0%, #fff5f7 100%);
     }
-
-    /* Force Hardware Acceleration for Cards to prevent white screen */
-    .gpu-card {
-      -webkit-transform: translate3d(0, 0, 0);
-      transform: translate3d(0, 0, 0);
+    
+    /* Optimized Card Layering */
+    .card-layer {
+      /* Replaced transform hack with just backface visibility */
       backface-visibility: hidden;
       -webkit-backface-visibility: hidden;
+      /* Ensure touch events work */
+      touch-action: pan-y; 
     }
   </style>
 </head>
@@ -86,7 +87,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
+    const { useState, useEffect, useRef, useMemo, memo } = React;
     
     // Safety check for Framer Motion
     const MotionLib = window.Motion || window.framerMotion;
@@ -366,10 +367,10 @@
     };
 
     // --- COMPONENTS ---
-    const Background = () => {
+    // Pure Component for Background to avoid unnecessary re-renders
+    const Background = memo(() => {
       return (
         <div className="fixed inset-0 w-full h-full -z-10 mobile-bg">
-          {/* Animated Blobs only for Desktop (sm:block) to save Mobile GPU Memory */}
           <div className="hidden sm:block absolute inset-0 overflow-hidden">
             <motion.div 
               animate={{ y: [0, -40, 0], x: [0, 20, 0], scale: [1, 1.1, 1] }}
@@ -384,9 +385,8 @@
           </div>
         </div>
       );
-    };
+    });
 
-    // --- LOCK SCREEN COMPONENT ---
     const LockScreen = ({ onUnlock }) => {
       const [pin, setPin] = useState("");
       const [errorCount, setErrorCount] = useState(0);
@@ -511,7 +511,7 @@
       );
     };
 
-    const TimeTile = ({ value, label }) => (
+    const TimeTile = memo(({ value, label }) => (
       <div className="flex flex-col items-center justify-center p-3 sm:p-4 rounded-2xl glass-panel shadow-sm border border-white/50 min-w-[65px] flex-1">
         <span className="text-2xl sm:text-3xl font-display font-semibold text-gray-800 tracking-tight">
           {pad2(value)}
@@ -520,9 +520,9 @@
           {label}
         </span>
       </div>
-    );
+    ));
 
-    const CountdownGrid = ({ parts, isLive }) => {
+    const CountdownGrid = memo(({ parts, isLive }) => {
       const displayParts = isLive 
         ? { months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 }
         : parts;
@@ -536,16 +536,18 @@
           <TimeTile value={displayParts.seconds} label="Sec" />
         </div>
       );
-    };
+    });
 
-    // Updated Timeline Card with simplified structure to prevent mobile rendering crashes
-    const TimelineCard = ({ event, isActive }) => {
+    // Memoized Card Component to prevent internal re-renders
+    const TimelineCard = memo(({ event, isActive }) => {
       if (!event) return null;
       
       const now = new Date();
+      // NOTE: We calculate these ONCE per render. 
+      // Since TimelineCard is memoized, it won't re-render every second unless `isActive` or `event` changes.
+      // This is crucial for fixing the "flickering" issue.
       const nextDate = getNextOccurrence(event, now);
       const lastDate = getLastOccurrence(event, now);
-      
       const daysUntil = getDaysDifference(now, nextDate);
       const daysPassed = getDaysDifference(lastDate, now);
       const occurrences = countOccurrences(event, BASE_START_DATE, now);
@@ -562,10 +564,8 @@
       } else {
         dateDisplay = "Loading...";
       }
-      
-      // EXTREME OPTIMIZATION: 
-      // Mobile = Solid Background (white/slate-50), No Blur, Standard Shadow.
-      // Desktop = Transparent, Blur, Glow Shadow.
+
+      // Styles: Solid opaque background for mobile to fix rendering bug
       const cardStyle = isActive 
         ? 'bg-[#ffffff] sm:bg-white/65 sm:backdrop-blur-xl shadow-lg sm:shadow-[0_20px_50px_rgba(8,112,184,0.12)] border-rose-100 sm:border-white/60' 
         : 'bg-[#ffffff] sm:bg-white/60 border-slate-100 sm:border-white/20 opacity-100 sm:opacity-80 scale-100 sm:scale-95';
@@ -573,7 +573,7 @@
       return (
         <div 
           className={`
-            gpu-card relative w-full max-w-[340px] h-[480px] rounded-[40px] p-6 flex flex-col items-center text-center
+            card-layer relative w-full max-w-[340px] h-[480px] rounded-[40px] p-6 flex flex-col items-center text-center
             border transition-all duration-300
             ${cardStyle}
           `}
@@ -637,16 +637,22 @@
           </div>
         </div>
       );
-    };
+    });
 
     const wrap = (min, max, v) => {
       const rangeSize = max - min;
       return ((((v - min) % rangeSize) + rangeSize) % rangeSize) + min;
     };
 
-    // --- MAIN CONTENT COMPONENT ---
-    const MainContent = ({ allEvents, status, timeParts, occurrenceCount, page, setPage, now }) => {
+    // --- NEW: ISOLATED CAROUSEL COMPONENT ---
+    // This component is strictly memoized. It DOES NOT re-render when the timer ticks.
+    // It only re-renders when `page` or `allEvents` changes.
+    const MemoryCarousel = memo(({ allEvents, page, setPage }) => {
       const eventIndex = wrap(0, allEvents.length, page);
+      const activeEvent = allEvents[eventIndex];
+      const prevEvent = allEvents[wrap(0, allEvents.length, page - 1)];
+      const nextEvent = allEvents[wrap(0, allEvents.length, page + 1)];
+
       const x = useMotionValue(0);
       const inputRange = [-200, 0, 200];
       const opacity = useTransform(x, inputRange, [0.5, 1, 0.5]);
@@ -656,15 +662,52 @@
         setPage(page + newDirection);
       };
 
+      return (
+        <div className="relative h-[500px] w-full flex items-center justify-center overflow-visible" style={{ isolation: 'isolate', touchAction: 'pan-y' }}>
+             <motion.div
+                className="absolute z-20 cursor-grab active:cursor-grabbing w-full flex justify-center items-center"
+                style={{ x, opacity, scale }}
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.2}
+                onDragEnd={(e, { offset, velocity }) => {
+                  const swipe = Math.abs(offset.x) * velocity.x;
+                  if (swipe < -100 || offset.x < -100) {
+                    paginate(1);
+                  } else if (swipe > 100 || offset.x > 100) {
+                    paginate(-1);
+                  }
+                }}
+                // Key prop is critical here for React to treat this as stable
+                key={activeEvent ? activeEvent.id : 'empty'}
+             >
+                <TimelineCard event={activeEvent} isActive={true} />
+             </motion.div>
+
+             <div className="absolute z-10 opacity-40 scale-90 -translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
+               <TimelineCard event={prevEvent} isActive={false} />
+             </div>
+             <div className="absolute z-10 opacity-40 scale-90 translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
+               <TimelineCard event={nextEvent} isActive={false} />
+             </div>
+             
+             <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none sm:hidden z-0 opacity-20">
+               <ChevronLeftIcon size={32} />
+               <ChevronRightIcon size={32} />
+             </div>
+          </div>
+      );
+    });
+
+    // --- MAIN CONTENT COMPONENT ---
+    const MainContent = ({ allEvents, status, timeParts, occurrenceCount, page, setPage, now }) => {
       const displayEvent = status.activeEvent || allEvents[0];
       const displayDate = status.isLive 
            ? "Happening Now"
            : getNextOccurrence(displayEvent, now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-      // Calculate keys for side cards to ensure stable rendering
-      const prevEvent = allEvents[wrap(0, allEvents.length, page - 1)];
-      const nextEvent = allEvents[wrap(0, allEvents.length, page + 1)];
-      const activeEvent = allEvents[eventIndex];
+      // Calculate index purely for the dots indicator
+      const eventIndex = wrap(0, allEvents.length, page);
 
       return (
           <motion.div 
@@ -742,37 +785,9 @@
                   </div>
                 </div>
 
-                <div className="relative h-[500px] w-full flex items-center justify-center overflow-visible" style={{ isolation: 'isolate' }}>
-                   <motion.div
-                      className="absolute z-20 cursor-grab active:cursor-grabbing touch-pan-y w-full flex justify-center items-center"
-                      style={{ x, opacity, scale }}
-                      drag="x"
-                      dragConstraints={{ left: 0, right: 0 }}
-                      dragElastic={0.2}
-                      onDragEnd={(e, { offset, velocity }) => {
-                        const swipe = Math.abs(offset.x) * velocity.x;
-                        if (swipe < -100 || offset.x < -100) {
-                          paginate(1);
-                        } else if (swipe > 100 || offset.x > 100) {
-                          paginate(-1);
-                        }
-                      }}
-                   >
-                      <TimelineCard key={activeEvent.id} event={activeEvent} isActive={true} />
-                   </motion.div>
-
-                   <div className="absolute z-10 opacity-40 scale-90 -translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
-                     <TimelineCard key={prevEvent.id} event={prevEvent} isActive={false} />
-                   </div>
-                   <div className="absolute z-10 opacity-40 scale-90 translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
-                     <TimelineCard key={nextEvent.id} event={nextEvent} isActive={false} />
-                   </div>
-                   
-                   <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none sm:hidden z-0 opacity-20">
-                     <ChevronLeftIcon size={32} />
-                     <ChevronRightIcon size={32} />
-                   </div>
-                </div>
+                {/* --- ISOLATED SWIPE CAROUSEL --- */}
+                {/* This uses React.memo so it won't re-render with timer ticks */}
+                <MemoryCarousel allEvents={allEvents} page={page} setPage={setPage} />
                 
                 <div className="flex justify-center gap-2 mt-2">
                   {allEvents.map((_, i) => (
