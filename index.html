@@ -4,7 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Moments - Waqas & Safiyya</title>
+  <title>Waqas & Safiyya Moments</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💞</text></svg>">
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -197,6 +198,8 @@
         end.setDate(center.getDate() + 1);
         end.setHours(23, 59, 59, 999);
 
+        // If dynamic date is passed, we can't easily bump year without recalculating.
+        // But getNextOccurrence handles the sorting.
         return { start, end };
       }
 
@@ -214,7 +217,7 @@
 
     const getNextOccurrence = (ev, now) => {
       if (!ev) return now;
-      if (ev.dynamicDate) return ev.dynamicDate;
+      if (ev.dynamicDate) return new Date(ev.dynamicDate);
       const w = getEventWindow(ev, now);
       return w.start;
     };
@@ -286,10 +289,11 @@
       let bestStart = null;
       
       for (const ev of events) {
-        const w = getEventWindow(ev, now);
-        if (w.start > now) {
-          if (!bestStart || w.start < bestStart) {
-            bestStart = w.start;
+        // We use getNextOccurrence to find the true future date
+        const nextDate = getNextOccurrence(ev, now);
+        if (nextDate > now) {
+          if (!bestStart || nextDate < bestStart) {
+            bestStart = nextDate;
             bestEvent = ev;
           }
         }
@@ -326,6 +330,7 @@
           eventEndBuffer.setDate(eventEndBuffer.getDate() + 1);
           eventEndBuffer.setHours(23, 59, 59);
 
+          // If date has passed for this Hijri year, fetch next year
           if (eventEndBuffer < today) {
              const nextHijriDate = `${pad2(config.hijriDay)}-${pad2(config.hijriMonth)}-${currentHijriYear + 1}`;
              res = await fetch(`https://api.aladhan.com/v1/hToG?date=${nextHijriDate}`);
@@ -349,8 +354,16 @@
           console.warn(`Failed to fetch ${config.id}, using fallback.`, e);
           const fallbackStr = FALLBACK_ISLAMIC_DATES[config.id];
           if (!fallbackStr) return null;
-          const d = new Date(fallbackStr);
+          let d = new Date(fallbackStr);
           d.setHours(9,0,0,0);
+          
+          // Safety: If fallback date is in the past, bump it forward approx 354 days (Lunar year)
+          // to ensure it appears in future sort order, not past.
+          const now = new Date();
+          if (d < now) {
+             d.setDate(d.getDate() + 354);
+          }
+
           return { ...config, dynamicDate: d, hour: 9, minute: 0 };
         }
       });
@@ -435,12 +448,12 @@
 
             {/* Headline */}
             <h1 className="font-serif text-5xl text-slate-800 leading-[1.1] mb-6 tracking-tight">
-              Some stories are<br/>only meant<br/>for two hearts...
+              Every second of us<br/>is precious…<br/>and protected.
             </h1>
             
             {/* Subtext */}
             <p className="text-slate-500 font-medium text-sm mb-10 px-4 leading-relaxed">
-              Enter the 4-digit code when I came into this world.
+              Type your 4-digit birth code to unlock our countdown.
             </p>
 
             {!isUnlocking ? (
@@ -488,7 +501,7 @@
                   onClick={handleUnlock}
                   className="w-full max-w-[280px] py-4 rounded-full bg-[#fca5a5] hover:bg-[#fb7185] text-white font-semibold shadow-lg shadow-rose-200/50 active:scale-95 transition-all duration-300"
                 >
-                  Unlock Our Story
+                  Continue to Our Time
                 </button>
               </>
             ) : (
@@ -802,7 +815,7 @@
             combined.sort((a, b) => {
               const dateA = getNextOccurrence(a, currentNow);
               const dateB = getNextOccurrence(b, currentNow);
-              return dateA - dateB;
+              return dateA.getTime() - dateB.getTime();
             });
             
             setAllEvents(combined);
