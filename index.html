@@ -58,13 +58,6 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     
-    .glass-card {
-      background: rgba(255, 255, 255, 0.65);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.6);
-      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
-    }
     .glass-panel {
       background: rgba(255, 255, 255, 0.35);
       backdrop-filter: blur(12px);
@@ -72,13 +65,14 @@
       border: 1px solid rgba(255, 255, 255, 0.4);
     }
     
-    /* Force GPU acceleration to prevent disappearing elements on mobile */
+    /* Optimized for Mobile: Removes Blur to prevent blank screens */
     .force-gpu {
-      transform: translateZ(0);
-      -webkit-transform: translateZ(0);
+      transform: translate3d(0,0,0);
+      -webkit-transform: translate3d(0,0,0);
       backface-visibility: hidden;
       -webkit-backface-visibility: hidden;
       will-change: transform, opacity;
+      perspective: 1000px;
     }
 
     /* Specific Lock Screen Styles */
@@ -546,7 +540,7 @@
       );
     };
 
-    // Updated Timeline Card with Robust Rendering
+    // Updated Timeline Card with High-Performance Mobile Styles
     const TimelineCard = ({ event, isActive }) => {
       if (!event) return null;
       
@@ -571,18 +565,24 @@
         dateDisplay = "Loading...";
       }
       
-      // We remove the transition-all and blur effects on inactive cards to prevent rendering crashes on mobile
+      // CRITICAL FIX FOR MOBILE:
+      // Mobile browsers crash with backdrop-filter inside motion transforms.
+      // Use high-opacity solid bg (bg-white/95) on mobile. Use blur only on desktop (sm:).
       const activeClass = isActive 
-        ? 'glass-card border-white/60 shadow-[0_20px_50px_rgba(8,112,184,0.12)] scale-100 opacity-100' 
+        ? 'bg-white/95 sm:bg-white/65 sm:backdrop-blur-xl shadow-[0_20px_50px_rgba(8,112,184,0.12)] scale-100 opacity-100 border-white/60' 
         : 'bg-white/40 border-white/20 opacity-80 scale-95';
 
       return (
         <div 
           className={`
             relative w-[85vw] max-w-[360px] h-[480px] rounded-[40px] p-6 flex flex-col items-center text-center
-            transition-transform duration-500 ease-out border force-gpu
+            transition-all duration-500 ease-out border force-gpu
             ${activeClass}
           `}
+          style={{ 
+            WebkitBackfaceVisibility: 'hidden',
+            WebkitTransform: 'translate3d(0,0,0)'
+          }}
         >
           <div className={`
             w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mb-6 shadow-lg shadow-rose-500/10
@@ -650,7 +650,7 @@
       return ((((v - min) % rangeSize) + rangeSize) % rangeSize) + min;
     };
 
-    // --- MAIN CONTENT COMPONENT (Extracted for Stability) ---
+    // --- MAIN CONTENT COMPONENT ---
     const MainContent = ({ allEvents, status, timeParts, occurrenceCount, page, setPage, now }) => {
       const eventIndex = wrap(0, allEvents.length, page);
       const x = useMotionValue(0);
