@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -75,9 +76,17 @@
 
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
-    const { motion, AnimatePresence, useMotionValue, useTransform } = window.Motion;
+    
+    // Safety check for Framer Motion
+    const MotionLib = window.Motion || window.framerMotion;
+    const { motion, AnimatePresence, useMotionValue, useTransform } = MotionLib || { 
+      motion: { div: 'div' }, 
+      AnimatePresence: ({children}) => children,
+      useMotionValue: () => ({ get: () => 0, set: () => {}, onChange: () => {} }),
+      useTransform: () => 0
+    };
 
-    // --- ICONS (Inline SVGs for stability) ---
+    // --- ICONS ---
     const HeartIcon = ({ className }) => (
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
     );
@@ -103,7 +112,7 @@
     // --- DATA & CONSTANTS ---
     const BASE_START_DATE = new Date(2025, 7, 1, 0, 0, 0); 
 
-    const EVENTS = [
+    const STATIC_EVENTS = [
       { id: "new-year", title: "New Year", month: 1, day: 1, hour: 0, minute: 0, icon: "🎆", description: "Another year together." },
       { id: "new-beginning", title: "The New Beginning", month: 1, day: 24, hour: 12, minute: 30, icon: "✨", description: "Start of a beautiful chapter." },
       { id: "safiyya-bday", title: "Safiyya Birthday", month: 2, day: 17, hour: 22, minute: 30, icon: "🎉", description: "Celebrating my love." },
@@ -117,6 +126,27 @@
       { id: "first-words", title: "The First Words", month: 10, day: 10, hour: 22, minute: 40, icon: "🗣️", description: "When silence turned into a story." }
     ];
 
+    // Islamic Events Configuration
+    // 1=Muharram, 8=Shaban, 9=Ramadan, 10=Shawwal, 12=Dhul Hijjah
+    const ISLAMIC_CONFIG = [
+      { id: "islamic-new-year", title: "Islamic New Year", hijriMonth: 1, hijriDay: 1, icon: "🌙", description: "1st Muharram - A new spiritual year." },
+      { id: "ramadan", title: "1st Ramadan", hijriMonth: 9, hijriDay: 1, icon: "📿", description: "The holy month of fasting begins." },
+      { id: "laylatul-qadr", title: "Laylatul Qadr", hijriMonth: 9, hijriDay: 20, icon: "✨", description: "20th Ramadan - The Night of Decree." },
+      { id: "eid-fitr", title: "Eid ul-Fitr", hijriMonth: 10, hijriDay: 1, icon: "🕌", description: "Festival of breaking the fast." },
+      { id: "eid-adha", title: "Eid ul-Adha", hijriMonth: 12, hijriDay: 10, icon: "🐑", description: "Festival of sacrifice." },
+      { id: "shab-barat", title: "Shab-e-Barat", hijriMonth: 8, hijriDay: 15, icon: "🤲", description: "15th Shaban - The night of forgiveness." }
+    ];
+
+    // Fallback Dates for 2025/2026 if API fails
+    const FALLBACK_ISLAMIC_DATES = {
+      "islamic-new-year": "2025-06-26",
+      "ramadan": "2025-03-01",
+      "laylatul-qadr": "2025-03-20",
+      "eid-fitr": "2025-03-31",
+      "eid-adha": "2025-06-07",
+      "shab-barat": "2025-02-14"
+    };
+
     // --- SERVICES ---
     const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -127,17 +157,61 @@
       return "th";
     };
 
-    const getNextOccurrence = (ev, from) => {
-      let y = from.getFullYear();
-      let d = new Date(y, ev.month - 1, ev.day, ev.hour || 0, ev.minute || 0, 0);
-      if (d <= from) {
-        y++;
-        d = new Date(y, ev.month - 1, ev.day, ev.hour || 0, ev.minute || 0, 0);
+    const getDaysDifference = (a, b) => {
+      if (!a || !b) return 0;
+      const oneDay = 1000 * 60 * 60 * 24;
+      const diffInTime = Math.abs(b.getTime() - a.getTime());
+      return Math.floor(diffInTime / oneDay);
+    };
+
+    // Calculate the 'Active Window' for an event
+    const getEventWindow = (ev, now) => {
+      if (!ev) return { start: now, end: now };
+
+      // Islamic Events: Range is +/- 1 day from the center date provided by API
+      if (ev.dynamicDate) {
+        const center = new Date(ev.dynamicDate);
+        // Start: -1 Day at 00:00
+        const start = new Date(center);
+        start.setDate(center.getDate() - 1);
+        start.setHours(0, 0, 0, 0);
+
+        // End: +1 Day at 23:59:59
+        const end = new Date(center);
+        end.setDate(center.getDate() + 1);
+        end.setHours(23, 59, 59, 999);
+
+        return { start, end };
       }
-      return d;
+
+      // Gregorian Events: Specific Start Time -> End of that Day
+      const year = now.getFullYear();
+      let start = new Date(year, ev.month - 1, ev.day, ev.hour || 0, ev.minute || 0, 0);
+      let end = new Date(year, ev.month - 1, ev.day, 23, 59, 59, 999);
+
+      // If the event ends before now, try next year
+      if (end < now) {
+        start.setFullYear(year + 1);
+        end.setFullYear(year + 1);
+      }
+
+      return { start, end };
+    };
+
+    const getNextOccurrence = (ev, now) => {
+      if (!ev) return now;
+      if (ev.dynamicDate) return ev.dynamicDate;
+      const w = getEventWindow(ev, now);
+      return w.start;
     };
 
     const getLastOccurrence = (ev, from) => {
+      if (!ev) return from;
+      if (ev.dynamicDate) {
+         const d = new Date(ev.dynamicDate);
+         d.setDate(d.getDate() - 354); // Approx hijri year
+         return d;
+      }
       let y = from.getFullYear();
       let d = new Date(y, ev.month - 1, ev.day, ev.hour || 0, ev.minute || 0, 0);
       if (d > from) {
@@ -147,16 +221,14 @@
       return d;
     };
 
-    const getDaysDifference = (a, b) => {
-      const oneDay = 1000 * 60 * 60 * 24;
-      const diffInTime = Math.abs(b.getTime() - a.getTime());
-      return Math.floor(diffInTime / oneDay);
-    };
-
     const countOccurrences = (ev, base, now) => {
+      if (!ev) return 0;
       let c = 0;
       let y = base.getFullYear();
       let safety = 0;
+      if (ev.dynamicDate) {
+         return Math.max(0, now.getFullYear() - base.getFullYear());
+      }
       while (safety < 1000) {
         const d = new Date(y, ev.month - 1, ev.day, ev.hour || 0, ev.minute || 0, 0);
         if (d > now) break;
@@ -168,6 +240,7 @@
     };
 
     const calculateTimeParts = (target, now) => {
+      if (!target || !now) return { months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 };
       let diff = target.getTime() - now.getTime();
       if (diff < 0) diff = 0;
 
@@ -187,21 +260,114 @@
       return { months, days, hours, minutes, seconds };
     };
 
-    const getUpcomingEvent = (events, now) => {
-      let bestEvent = null;
-      let bestDate = null;
+    // Find if we are IN an event, or which is next
+    const getStatus = (events, now) => {
+      // 1. Check if we are currently LIVE in any event
       for (const ev of events) {
-        const d = getNextOccurrence(ev, now);
-        if (!bestDate || d < bestDate) {
-          bestDate = d;
-          bestEvent = ev;
+        const w = getEventWindow(ev, now);
+        if (now >= w.start && now <= w.end) {
+          return { activeEvent: ev, isLive: true, targetDate: w.end };
         }
       }
-      return { upcomingEvent: bestEvent, upcomingDate: bestDate };
+
+      // 2. If not live, find next upcoming
+      let bestEvent = null;
+      let bestStart = null;
+      
+      for (const ev of events) {
+        const w = getEventWindow(ev, now);
+        if (w.start > now) {
+          if (!bestStart || w.start < bestStart) {
+            bestStart = w.start;
+            bestEvent = ev;
+          }
+        }
+      }
+      return { activeEvent: bestEvent, isLive: false, targetDate: bestStart };
+    };
+
+    // API Fetcher for Islamic Dates (Robust with Fallback)
+    const fetchIslamicEvents = async () => {
+      try {
+        const today = new Date();
+        let currentHijriYear;
+        
+        try {
+          const gToHRes = await fetch(`https://api.aladhan.com/v1/gToH?date=${pad2(today.getDate())}-${pad2(today.getMonth() + 1)}-${today.getFullYear()}`);
+          if (!gToHRes.ok) throw new Error("Hijri date fetch failed");
+          const gToHData = await gToHRes.json();
+          currentHijriYear = parseInt(gToHData.data.hijri.year);
+        } catch (e) {
+          console.warn("Hijri Year fetch failed, defaulting to 1446", e);
+          currentHijriYear = 1446;
+        }
+
+        const results = await Promise.allSettled(ISLAMIC_CONFIG.map(async (config) => {
+          // Fetch for current hijri year
+          const targetHijriDate = `${pad2(config.hijriDay)}-${pad2(config.hijriMonth)}-${currentHijriYear}`;
+          let res = await fetch(`https://api.aladhan.com/v1/hToG?date=${targetHijriDate}`);
+          if (!res.ok) throw new Error("Event date fetch failed");
+          let data = await res.json();
+          
+          // Parse "DD-MM-YYYY" manually to be safe on all browsers
+          const [dStr, mStr, yStr] = data.data.gregorian.date.split('-');
+          let gregDate = new Date(parseInt(yStr), parseInt(mStr) - 1, parseInt(dStr));
+          
+          // Event logic
+          const eventEndBuffer = new Date(gregDate);
+          eventEndBuffer.setDate(eventEndBuffer.getDate() + 1);
+          eventEndBuffer.setHours(23, 59, 59);
+
+          if (eventEndBuffer < today) {
+             const nextHijriDate = `${pad2(config.hijriDay)}-${pad2(config.hijriMonth)}-${currentHijriYear + 1}`;
+             res = await fetch(`https://api.aladhan.com/v1/hToG?date=${nextHijriDate}`);
+             if (res.ok) {
+                data = await res.json();
+                const [dNext, mNext, yNext] = data.data.gregorian.date.split('-');
+                gregDate = new Date(parseInt(yNext), parseInt(mNext) - 1, parseInt(dNext));
+             }
+          }
+          
+          gregDate.setHours(9, 0, 0, 0);
+
+          return {
+            ...config,
+            dynamicDate: gregDate,
+            hour: 9, 
+            minute: 0
+          };
+        }));
+
+        const fetchedEvents = results
+          .filter(r => r.status === 'fulfilled')
+          .map(r => r.value);
+          
+        // If API completely failed (returned 0 events), use fallback
+        if (fetchedEvents.length === 0) {
+           throw new Error("No events fetched");
+        }
+        
+        return fetchedEvents;
+
+      } catch (e) {
+        console.warn("Failed to fetch Islamic dates, using static fallbacks.", e);
+        // Use Fallback Dates
+        return ISLAMIC_CONFIG.map(config => {
+           const fallbackStr = FALLBACK_ISLAMIC_DATES[config.id];
+           if (!fallbackStr) return null;
+           const d = new Date(fallbackStr);
+           d.setHours(9,0,0,0);
+           return {
+             ...config,
+             dynamicDate: d,
+             hour: 9,
+             minute: 0
+           }
+        }).filter(e => e !== null);
+      }
     };
 
     // --- COMPONENTS ---
-
     const Background = () => {
       return (
         <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden bg-gradient-to-br from-rose-50 via-white to-pink-50">
@@ -215,14 +381,6 @@
             transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 1 }}
             className="absolute -bottom-32 -right-32 w-[30rem] h-[30rem] bg-orange-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-50"
           />
-          <motion.div 
-            animate={{ y: [0, -60, 0], opacity: [0.2, 0.4, 0.2] }}
-            transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute top-1/3 left-1/4 w-72 h-72 bg-rose-300 rounded-full mix-blend-multiply filter blur-[60px] opacity-30"
-          />
-          <div className="absolute inset-0 opacity-[0.03] pointer-events-none" 
-               style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}>
-          </div>
         </div>
       );
     };
@@ -238,19 +396,26 @@
       </div>
     );
 
-    const CountdownGrid = ({ parts }) => {
+    const CountdownGrid = ({ parts, isLive }) => {
+      // If live, show 00
+      const displayParts = isLive 
+        ? { months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 }
+        : parts;
+
       return (
         <div className="flex gap-2 w-full max-w-md mx-auto mt-6 px-1">
-          <TimeTile value={parts.months} label="Mos" />
-          <TimeTile value={parts.days} label="Days" />
-          <TimeTile value={parts.hours} label="Hrs" />
-          <TimeTile value={parts.minutes} label="Min" />
-          <TimeTile value={parts.seconds} label="Sec" />
+          <TimeTile value={displayParts.months} label="Mos" />
+          <TimeTile value={displayParts.days} label="Days" />
+          <TimeTile value={displayParts.hours} label="Hrs" />
+          <TimeTile value={displayParts.minutes} label="Min" />
+          <TimeTile value={displayParts.seconds} label="Sec" />
         </div>
       );
     };
 
     const TimelineCard = ({ event, isActive }) => {
+      if (!event) return null;
+      
       const now = new Date();
       const nextDate = getNextOccurrence(event, now);
       const lastDate = getLastOccurrence(event, now);
@@ -258,6 +423,21 @@
       const daysUntil = getDaysDifference(now, nextDate);
       const daysPassed = getDaysDifference(lastDate, now);
       const occurrences = countOccurrences(event, BASE_START_DATE, now);
+
+      // Formatting Date Logic
+      let dateDisplay = "";
+      if (event.dynamicDate && !isNaN(new Date(event.dynamicDate).getTime())) {
+         // Range +/- 1 Day
+         const d = new Date(event.dynamicDate);
+         const start = new Date(d); start.setDate(d.getDate() - 1);
+         const end = new Date(d); end.setDate(d.getDate() + 1);
+         const opts = { month: 'short', day: 'numeric' };
+         dateDisplay = `Expected: ${start.toLocaleDateString('en-US', opts)} - ${end.toLocaleDateString('en-US', opts)}`;
+      } else if (nextDate && !isNaN(nextDate.getTime())) {
+         dateDisplay = nextDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      } else {
+        dateDisplay = "Loading...";
+      }
       
       return (
         <div 
@@ -281,8 +461,8 @@
             <h3 className="font-serif text-3xl text-slate-900 leading-tight">
               {event.title}
             </h3>
-            <p className="text-slate-500 font-medium">
-               {nextDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+            <p className="text-slate-500 font-medium text-sm sm:text-base">
+               {dateDisplay}
             </p>
           </div>
 
@@ -322,7 +502,9 @@
 
           <div className="mt-6 flex items-center justify-center gap-2 text-[10px] text-slate-400 font-medium uppercase tracking-widest">
              <ClockIcon size={12} />
-             <span>{String(event.hour).padStart(2,'0')}:{String(event.minute).padStart(2,'0')}</span>
+             <span>
+              {event.dynamicDate ? 'Approx. 3 Days' : `${String(event.hour).padStart(2,'0')}:${String(event.minute).padStart(2,'0')}`}
+             </span>
           </div>
         </div>
       );
@@ -336,50 +518,100 @@
 
     const App = () => {
       const [now, setNow] = useState(new Date());
-      const [upcoming, setUpcoming] = useState({ upcomingEvent: null, upcomingDate: null });
+      const [allEvents, setAllEvents] = useState(STATIC_EVENTS);
+      const [status, setStatus] = useState({ activeEvent: null, isLive: false, targetDate: null });
       const [timeParts, setTimeParts] = useState({ months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 });
       const [page, setPage] = useState(0);
+      const [isLoaded, setIsLoaded] = useState(false);
 
-      // Initialize
       useEffect(() => {
-        const initialNow = new Date();
-        const next = getUpcomingEvent(EVENTS, initialNow);
-        setUpcoming(next);
-        if(next.upcomingDate) setTimeParts(calculateTimeParts(next.upcomingDate, initialNow));
+        const init = async () => {
+          try {
+            const islamicEvents = await fetchIslamicEvents();
+            const currentNow = new Date();
+            const combined = [...STATIC_EVENTS, ...islamicEvents];
+            
+            // Sort based on next occurrence
+            combined.sort((a, b) => {
+              const dateA = getNextOccurrence(a, currentNow);
+              const dateB = getNextOccurrence(b, currentNow);
+              return dateA - dateB;
+            });
+            
+            setAllEvents(combined);
 
-        if (next.upcomingEvent) {
-          const idx = EVENTS.findIndex(e => e.id === next.upcomingEvent.id);
-          if (idx !== -1) setPage(idx);
-        }
+            const st = getStatus(combined, currentNow);
+            setStatus(st);
+            
+            if(st.targetDate && !st.isLive) {
+              setTimeParts(calculateTimeParts(st.targetDate, currentNow));
+            } else {
+              setTimeParts({ months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 });
+            }
 
+            if (st.activeEvent) {
+              const idx = combined.findIndex(e => e.id === st.activeEvent.id);
+              if (idx !== -1) setPage(idx);
+            }
+          } catch(err) {
+            console.error("Initialization error", err);
+          } finally {
+            setIsLoaded(true);
+          }
+        };
+        init();
+      }, []);
+
+      useEffect(() => {
+        if (!isLoaded) return;
         const timer = setInterval(() => {
           const currentNow = new Date();
           setNow(currentNow);
-          const nextUpdate = getUpcomingEvent(EVENTS, currentNow);
-          setUpcoming(nextUpdate);
-          if (nextUpdate.upcomingDate) {
-            setTimeParts(calculateTimeParts(nextUpdate.upcomingDate, currentNow));
+          
+          const st = getStatus(allEvents, currentNow);
+          setStatus(st);
+
+          if (st.isLive) {
+            setTimeParts({ months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 });
+          } else if (st.targetDate) {
+            setTimeParts(calculateTimeParts(st.targetDate, currentNow));
           }
         }, 1000);
         return () => clearInterval(timer);
-      }, []);
+      }, [isLoaded, allEvents]);
 
-      const occurrenceCount = upcoming.upcomingEvent 
-        ? countOccurrences(upcoming.upcomingEvent, BASE_START_DATE, now) + 1
+      const occurrenceCount = status.activeEvent 
+        ? countOccurrences(status.activeEvent, BASE_START_DATE, now) + (status.isLive ? 0 : 1)
         : 0;
 
-      const eventIndex = wrap(0, EVENTS.length, page);
+      const eventIndex = wrap(0, allEvents.length, page);
       const x = useMotionValue(0);
       const inputRange = [-200, 0, 200];
-      const opacityOutputRange = [0.5, 1, 0.5];
-      const scaleOutputRange = [0.8, 1, 0.8];
-      
-      const opacity = useTransform(x, inputRange, opacityOutputRange);
-      const scale = useTransform(x, inputRange, scaleOutputRange);
+      const opacity = useTransform(x, inputRange, [0.5, 1, 0.5]);
+      const scale = useTransform(x, inputRange, [0.8, 1, 0.8]);
 
       const paginate = (newDirection) => {
         setPage(page + newDirection);
       };
+
+      if (!isLoaded) {
+         return (
+           <div className="fixed inset-0 flex items-center justify-center bg-rose-50 text-rose-400">
+             <motion.div 
+               animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }} 
+               transition={{ repeat: Infinity, duration: 2 }}
+             >
+               <HeartIcon className="w-12 h-12" />
+             </motion.div>
+           </div>
+         )
+      }
+
+      // Safe access
+      const displayEvent = status.activeEvent || allEvents[0];
+      const displayDate = status.isLive 
+         ? "Happening Now"
+         : getNextOccurrence(displayEvent, now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
       return (
         <div className="relative min-h-screen text-slate-800 font-sans selection:bg-rose-200 overflow-x-hidden">
@@ -400,36 +632,43 @@
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8 }}
               >
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/40 border border-white/50 mb-6 backdrop-blur-md shadow-sm">
+                <div className={`
+                  inline-flex items-center gap-2 px-3 py-1 rounded-full border mb-6 backdrop-blur-md shadow-sm transition-colors duration-300
+                  ${status.isLive ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white/40 border-white/50 text-slate-600'}
+                `}>
                   <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                    {status.isLive ? (
+                       <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
+                    ) : (
+                      <>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                      </>
+                    )}
                   </span>
-                  <span className="text-[11px] uppercase tracking-widest font-semibold text-slate-600">Up Next</span>
+                  <span className="text-[11px] uppercase tracking-widest font-semibold">
+                    {status.isLive ? 'Live Event' : 'Up Next'}
+                  </span>
                 </div>
 
                 <AnimatePresence mode="wait">
-                  {upcoming.upcomingEvent ? (
-                    <motion.div
-                      key={upcoming.upcomingEvent.id}
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 1.05 }}
-                      transition={{ duration: 0.5 }}
-                    >
-                      <h1 className="text-4xl sm:text-5xl font-serif text-slate-900 leading-tight mb-2">
-                        {upcoming.upcomingEvent.title}
-                      </h1>
-                      <p className="text-slate-500 text-lg sm:text-xl font-light">
-                        {upcoming.upcomingDate?.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-                      </p>
-                    </motion.div>
-                  ) : (
-                    <div className="h-32 flex items-center justify-center">Loading...</div>
-                  )}
+                  <motion.div
+                    key={displayEvent.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 1.05 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <h1 className="text-4xl sm:text-5xl font-serif text-slate-900 leading-tight mb-2">
+                      {displayEvent.title}
+                    </h1>
+                    <p className={`text-lg sm:text-xl font-light ${status.isLive ? 'text-red-500 font-medium' : 'text-slate-500'}`}>
+                      {displayDate}
+                    </p>
+                  </motion.div>
                 </AnimatePresence>
 
-                <CountdownGrid parts={timeParts} />
+                <CountdownGrid parts={timeParts} isLive={status.isLive} />
 
                 <div className="mt-8 text-sm text-slate-500 bg-white/30 inline-block px-4 py-2 rounded-xl backdrop-blur-sm border border-white/40 shadow-sm">
                    This will be the <span className="font-bold text-rose-500">{occurrenceCount}{getSuffix(occurrenceCount)}</span> time since our journey began.
@@ -463,14 +702,14 @@
                       }
                     }}
                  >
-                    <TimelineCard event={EVENTS[eventIndex]} isActive={true} />
+                    <TimelineCard event={allEvents[eventIndex]} isActive={true} />
                  </motion.div>
 
                  <div className="absolute z-10 opacity-40 scale-90 -translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
-                   <TimelineCard event={EVENTS[wrap(0, EVENTS.length, page - 1)]} isActive={false} />
+                   <TimelineCard event={allEvents[wrap(0, allEvents.length, page - 1)]} isActive={false} />
                  </div>
                  <div className="absolute z-10 opacity-40 scale-90 translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
-                   <TimelineCard event={EVENTS[wrap(0, EVENTS.length, page + 1)]} isActive={false} />
+                   <TimelineCard event={allEvents[wrap(0, allEvents.length, page + 1)]} isActive={false} />
                  </div>
                  
                  <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none sm:hidden z-0 opacity-20">
@@ -480,7 +719,7 @@
               </div>
               
               <div className="flex justify-center gap-2 mt-2">
-                {EVENTS.map((_, i) => (
+                {allEvents.map((_, i) => (
                   <div 
                     key={i} 
                     className={`h-1.5 rounded-full transition-all duration-300 ${i === eventIndex ? 'w-6 bg-rose-400' : 'w-1.5 bg-gray-300'}`}
