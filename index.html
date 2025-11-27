@@ -53,6 +53,7 @@
       overscroll-behavior-y: none;
       margin: 0;
       -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
     }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -71,6 +72,15 @@
       border: 1px solid rgba(255, 255, 255, 0.4);
     }
     
+    /* Force GPU acceleration to prevent disappearing elements on mobile */
+    .force-gpu {
+      transform: translateZ(0);
+      -webkit-transform: translateZ(0);
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      will-change: transform, opacity;
+    }
+
     /* Specific Lock Screen Styles */
     .lock-input::placeholder {
       color: #cbd5e1;
@@ -197,9 +207,6 @@
         const end = new Date(center);
         end.setDate(center.getDate() + 1);
         end.setHours(23, 59, 59, 999);
-
-        // If dynamic date is passed, we can't easily bump year without recalculating.
-        // But getNextOccurrence handles the sorting.
         return { start, end };
       }
 
@@ -289,7 +296,6 @@
       let bestStart = null;
       
       for (const ev of events) {
-        // We use getNextOccurrence to find the true future date
         const nextDate = getNextOccurrence(ev, now);
         if (nextDate > now) {
           if (!bestStart || nextDate < bestStart) {
@@ -357,8 +363,6 @@
           let d = new Date(fallbackStr);
           d.setHours(9,0,0,0);
           
-          // Safety: If fallback date is in the past, bump it forward approx 354 days (Lunar year)
-          // to ensure it appears in future sort order, not past.
           const now = new Date();
           if (d < now) {
              d.setDate(d.getDate() + 354);
@@ -379,12 +383,12 @@
           <motion.div 
             animate={{ y: [0, -40, 0], x: [0, 20, 0], scale: [1, 1.1, 1] }}
             transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute -top-20 -left-20 w-96 h-96 bg-rose-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-40"
+            className="absolute -top-20 -left-20 w-96 h-96 bg-rose-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-40 force-gpu"
           />
           <motion.div 
             animate={{ y: [0, 50, 0], x: [0, -30, 0], scale: [1, 1.2, 1] }}
             transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-            className="absolute -bottom-32 -right-32 w-[30rem] h-[30rem] bg-pink-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-50"
+            className="absolute -bottom-32 -right-32 w-[30rem] h-[30rem] bg-pink-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-50 force-gpu"
           />
         </div>
       );
@@ -411,7 +415,7 @@
           setIsUnlocking(true);
           setTimeout(() => {
             onUnlock();
-          }, 1800); // 1.8s delay for unlock animation
+          }, 1800); 
         } else {
           setErrorCount(prev => prev + 1);
           setPin("");
@@ -435,23 +439,19 @@
           exit={{ opacity: 0 }}
           transition={{ duration: 0.8 }}
         >
-          {/* Content Wrapper */}
           <motion.div 
              animate={shake ? { x: [0, -10, 10, -10, 10, 0] } : {}}
              transition={{ duration: 0.4 }}
              className="w-full max-w-sm flex flex-col items-center relative z-20"
           >
-            {/* Lock Icon */}
             <div className={`mb-8 transition-all duration-700 ${isUnlocking ? 'text-emerald-400 scale-110' : 'text-rose-200'}`}>
               {isUnlocking ? <LockOpenIcon size={56} className="drop-shadow-sm" /> : <LockIcon size={56} className="drop-shadow-sm" />}
             </div>
 
-            {/* Headline */}
             <h1 className="font-serif text-5xl text-slate-800 leading-[1.1] mb-6 tracking-tight">
               Every second of us<br/>is precious…<br/>and protected.
             </h1>
             
-            {/* Subtext */}
             <p className="text-slate-500 font-medium text-sm mb-10 px-4 leading-relaxed">
               Type your 4-digit birth code to unlock our countdown.
             </p>
@@ -477,7 +477,6 @@
                   />
                 </div>
 
-                {/* Error & Hint Area */}
                 <div className="h-16 mb-6 flex flex-col items-center justify-center w-full">
                   <AnimatePresence mode="wait">
                     {errorMessage ? (
@@ -547,6 +546,7 @@
       );
     };
 
+    // Updated Timeline Card with Robust Rendering
     const TimelineCard = ({ event, isActive }) => {
       if (!event) return null;
       
@@ -571,25 +571,28 @@
         dateDisplay = "Loading...";
       }
       
+      // We remove the transition-all and blur effects on inactive cards to prevent rendering crashes on mobile
+      const activeClass = isActive 
+        ? 'glass-card border-white/60 shadow-[0_20px_50px_rgba(8,112,184,0.12)] scale-100 opacity-100' 
+        : 'bg-white/40 border-white/20 opacity-80 scale-95';
+
       return (
         <div 
           className={`
             relative w-[85vw] max-w-[360px] h-[480px] rounded-[40px] p-6 flex flex-col items-center text-center
-            transition-all duration-500 ease-out border
-            ${isActive 
-              ? 'glass-card border-white/60 shadow-[0_20px_50px_rgba(8,112,184,0.12)] scale-100 opacity-100' 
-              : 'bg-white/30 border-white/20 blur-[1px] opacity-80 scale-95'}
+            transition-transform duration-500 ease-out border force-gpu
+            ${activeClass}
           `}
         >
           <div className={`
             w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mb-6 shadow-lg shadow-rose-500/10
-            transition-all duration-500
+            transition-transform duration-500
             ${isActive ? 'bg-gradient-to-br from-white to-rose-50 scale-100' : 'bg-white/50 scale-90 grayscale'}
           `}>
             {event.icon}
           </div>
 
-          <div className="space-y-2 mb-8">
+          <div className="space-y-2 mb-8 w-full">
             <h3 className="font-serif text-3xl text-slate-900 leading-tight">
               {event.title}
             </h3>
@@ -663,6 +666,11 @@
       const displayDate = status.isLive 
            ? "Happening Now"
            : getNextOccurrence(displayEvent, now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+      // Calculate keys for side cards to ensure stable rendering
+      const prevEvent = allEvents[wrap(0, allEvents.length, page - 1)];
+      const nextEvent = allEvents[wrap(0, allEvents.length, page + 1)];
+      const activeEvent = allEvents[eventIndex];
 
       return (
           <motion.div 
@@ -740,7 +748,7 @@
                   </div>
                 </div>
 
-                <div className="relative h-[500px] w-full flex items-center justify-center overflow-visible">
+                <div className="relative h-[500px] w-full flex items-center justify-center overflow-visible" style={{ isolation: 'isolate' }}>
                    <motion.div
                       className="absolute z-20 cursor-grab active:cursor-grabbing touch-pan-y"
                       style={{ x, opacity, scale }}
@@ -756,14 +764,14 @@
                         }
                       }}
                    >
-                      <TimelineCard event={allEvents[eventIndex]} isActive={true} />
+                      <TimelineCard key={activeEvent.id} event={activeEvent} isActive={true} />
                    </motion.div>
 
-                   <div className="absolute z-10 opacity-40 scale-90 -translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
-                     <TimelineCard event={allEvents[wrap(0, allEvents.length, page - 1)]} isActive={false} />
+                   <div className="absolute z-10 opacity-40 scale-90 -translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500 force-gpu">
+                     <TimelineCard key={prevEvent.id} event={prevEvent} isActive={false} />
                    </div>
-                   <div className="absolute z-10 opacity-40 scale-90 translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
-                     <TimelineCard event={allEvents[wrap(0, allEvents.length, page + 1)]} isActive={false} />
+                   <div className="absolute z-10 opacity-40 scale-90 translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500 force-gpu">
+                     <TimelineCard key={nextEvent.id} event={nextEvent} isActive={false} />
                    </div>
                    
                    <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none sm:hidden z-0 opacity-20">
