@@ -38,7 +38,7 @@
   </script>
 
   <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
   
   <!-- React & Framer Motion from CDN -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -68,6 +68,13 @@
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.4);
+    }
+    
+    /* Specific Lock Screen Styles */
+    .lock-input::placeholder {
+      color: #cbd5e1;
+      font-weight: 400;
+      letter-spacing: normal;
     }
   </style>
 </head>
@@ -108,9 +115,23 @@
     const ChevronRightIcon = ({ size }) => (
       <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
     );
+    // Custom Lock Icons to match design
+    const LockIcon = ({ size, className }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <rect x="5" y="11" width="14" height="10" rx="2" ry="2" />
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </svg>
+    );
+    const LockOpenIcon = ({ size, className }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <rect x="5" y="11" width="14" height="10" rx="2" ry="2" />
+        <path d="M8 11V7a4 4 0 0 1 8 0" />
+      </svg>
+    );
 
     // --- DATA & CONSTANTS ---
     const BASE_START_DATE = new Date(2025, 7, 1, 0, 0, 0); 
+    const LOCK_CODE = "2306";
 
     const STATIC_EVENTS = [
       { id: "new-year", title: "New Year", month: 1, day: 1, hour: 0, minute: 0, icon: "🎆", description: "Another year together." },
@@ -127,7 +148,6 @@
     ];
 
     // Islamic Events Configuration
-    // 1=Muharram, 8=Shaban, 9=Ramadan, 10=Shawwal, 12=Dhul Hijjah
     const ISLAMIC_CONFIG = [
       { id: "islamic-new-year", title: "Islamic New Year", hijriMonth: 1, hijriDay: 1, icon: "🌙", description: "1st Muharram - A new spiritual year." },
       { id: "ramadan", title: "1st Ramadan", hijriMonth: 9, hijriDay: 1, icon: "📿", description: "The holy month of fasting begins." },
@@ -164,19 +184,15 @@
       return Math.floor(diffInTime / oneDay);
     };
 
-    // Calculate the 'Active Window' for an event
     const getEventWindow = (ev, now) => {
       if (!ev) return { start: now, end: now };
 
-      // Islamic Events: Range is +/- 1 day from the center date provided by API
       if (ev.dynamicDate) {
         const center = new Date(ev.dynamicDate);
-        // Start: -1 Day at 00:00
         const start = new Date(center);
         start.setDate(center.getDate() - 1);
         start.setHours(0, 0, 0, 0);
 
-        // End: +1 Day at 23:59:59
         const end = new Date(center);
         end.setDate(center.getDate() + 1);
         end.setHours(23, 59, 59, 999);
@@ -184,12 +200,10 @@
         return { start, end };
       }
 
-      // Gregorian Events: Specific Start Time -> End of that Day
       const year = now.getFullYear();
       let start = new Date(year, ev.month - 1, ev.day, ev.hour || 0, ev.minute || 0, 0);
       let end = new Date(year, ev.month - 1, ev.day, 23, 59, 59, 999);
 
-      // If the event ends before now, try next year
       if (end < now) {
         start.setFullYear(year + 1);
         end.setFullYear(year + 1);
@@ -209,7 +223,7 @@
       if (!ev) return from;
       if (ev.dynamicDate) {
          const d = new Date(ev.dynamicDate);
-         d.setDate(d.getDate() - 354); // Approx hijri year
+         d.setDate(d.getDate() - 354); 
          return d;
       }
       let y = from.getFullYear();
@@ -260,9 +274,7 @@
       return { months, days, hours, minutes, seconds };
     };
 
-    // Find if we are IN an event, or which is next
     const getStatus = (events, now) => {
-      // 1. Check if we are currently LIVE in any event
       for (const ev of events) {
         const w = getEventWindow(ev, now);
         if (now >= w.start && now <= w.end) {
@@ -270,7 +282,6 @@
         }
       }
 
-      // 2. If not live, find next upcoming
       let bestEvent = null;
       let bestStart = null;
       
@@ -286,12 +297,10 @@
       return { activeEvent: bestEvent, isLive: false, targetDate: bestStart };
     };
 
-    // API Fetcher for Islamic Dates (Robust with Fallback)
     const fetchIslamicEvents = async () => {
       const today = new Date();
-      let currentHijriYear = 1446; // Default safe year
+      let currentHijriYear = 1446;
 
-      // 1. Try to get the real current Hijri Year
       try {
         const gToHRes = await fetch(`https://api.aladhan.com/v1/gToH?date=${pad2(today.getDate())}-${pad2(today.getMonth() + 1)}-${today.getFullYear()}`);
         if (gToHRes.ok) {
@@ -302,7 +311,6 @@
         console.warn("Hijri Year fetch failed, defaulting to 1446", e);
       }
 
-      // 2. Fetch each event individually so one failure doesn't break others
       const promises = ISLAMIC_CONFIG.map(async (config) => {
         try {
           const targetHijriDate = `${pad2(config.hijriDay)}-${pad2(config.hijriMonth)}-${currentHijriYear}`;
@@ -311,11 +319,9 @@
           if (!res.ok) throw new Error(`API error for ${config.id}`);
           let data = await res.json();
           
-          // Parse "DD-MM-YYYY" manually to be safe on all browsers
           const [dStr, mStr, yStr] = data.data.gregorian.date.split('-');
           let gregDate = new Date(parseInt(yStr), parseInt(mStr) - 1, parseInt(dStr));
           
-          // If this date has already passed for this year, try next Hijri year
           const eventEndBuffer = new Date(gregDate);
           eventEndBuffer.setDate(eventEndBuffer.getDate() + 1);
           eventEndBuffer.setHours(23, 59, 59);
@@ -340,46 +346,164 @@
           };
 
         } catch (e) {
-          // 3. Fallback logic: If API fails for THIS event, use fallback
           console.warn(`Failed to fetch ${config.id}, using fallback.`, e);
-          
           const fallbackStr = FALLBACK_ISLAMIC_DATES[config.id];
           if (!fallbackStr) return null;
-          
           const d = new Date(fallbackStr);
           d.setHours(9,0,0,0);
-          
-          // Note: If fallback date is in past, it will just show as "past" or user has to update constant manually next year.
-          // This is a safety net.
-          return {
-             ...config,
-             dynamicDate: d,
-             hour: 9,
-             minute: 0
-           };
+          return { ...config, dynamicDate: d, hour: 9, minute: 0 };
         }
       });
 
       const results = await Promise.all(promises);
-      // Filter out any nulls (shouldn't happen given fallback, but safe to do)
       return results.filter(e => e !== null);
     };
 
     // --- COMPONENTS ---
     const Background = () => {
       return (
-        <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden bg-gradient-to-br from-rose-50 via-white to-pink-50">
+        <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden bg-[#fff5f7]">
           <motion.div 
             animate={{ y: [0, -40, 0], x: [0, 20, 0], scale: [1, 1.1, 1] }}
             transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute -top-20 -left-20 w-96 h-96 bg-rose-200 rounded-full mix-blend-multiply filter blur-[80px] opacity-40"
+            className="absolute -top-20 -left-20 w-96 h-96 bg-rose-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-40"
           />
           <motion.div 
             animate={{ y: [0, 50, 0], x: [0, -30, 0], scale: [1, 1.2, 1] }}
             transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-            className="absolute -bottom-32 -right-32 w-[30rem] h-[30rem] bg-orange-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-50"
+            className="absolute -bottom-32 -right-32 w-[30rem] h-[30rem] bg-pink-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-50"
           />
         </div>
+      );
+    };
+
+    // --- LOCK SCREEN COMPONENT ---
+    const LockScreen = ({ onUnlock }) => {
+      const [pin, setPin] = useState("");
+      const [errorCount, setErrorCount] = useState(0);
+      const [isUnlocking, setIsUnlocking] = useState(false);
+      const [shake, setShake] = useState(false);
+      const inputRef = useRef(null);
+
+      const ERRORS = [
+        "Hmm… that wasn’t the right code.", 
+        "Hmm… not quite right.",            
+        "I know you know this 😘",           
+        "DDMM ❤️ (No slashes)",             
+        "I’ll wait… take your time 🤍"       
+      ];
+
+      const handleUnlock = () => {
+        if (pin === LOCK_CODE) {
+          setIsUnlocking(true);
+          setTimeout(() => {
+            onUnlock();
+          }, 1800); // 1.8s delay for unlock animation
+        } else {
+          setErrorCount(prev => prev + 1);
+          setPin("");
+          setShake(true);
+          setTimeout(() => setShake(false), 500);
+          inputRef.current?.focus();
+        }
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter') handleUnlock();
+      };
+
+      const errorMessage = errorCount > 0 ? ERRORS[Math.min(errorCount - 1, ERRORS.length - 1)] : "";
+
+      return (
+        <motion.div 
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6 text-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.8 }}
+        >
+          {/* Content Wrapper */}
+          <motion.div 
+             animate={shake ? { x: [0, -10, 10, -10, 10, 0] } : {}}
+             transition={{ duration: 0.4 }}
+             className="w-full max-w-sm flex flex-col items-center relative z-20"
+          >
+            {/* Lock Icon */}
+            <div className={`mb-8 transition-all duration-700 ${isUnlocking ? 'text-emerald-400 scale-110' : 'text-rose-200'}`}>
+              {isUnlocking ? <LockOpenIcon size={56} className="drop-shadow-sm" /> : <LockIcon size={56} className="drop-shadow-sm" />}
+            </div>
+
+            {/* Headline */}
+            <h1 className="font-serif text-5xl text-slate-800 leading-[1.1] mb-6 tracking-tight">
+              Some stories are<br/>only meant<br/>for two hearts...
+            </h1>
+            
+            {/* Subtext */}
+            <p className="text-slate-500 font-medium text-sm mb-10 px-4 leading-relaxed">
+              Enter the 4-digit code when I came into this world.
+            </p>
+
+            {!isUnlocking ? (
+              <>
+                <div className="relative w-full max-w-[280px] mb-8">
+                  <input
+                    ref={inputRef}
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength="4"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Enter birth date code"
+                    className={`
+                      lock-input w-full px-6 py-4 rounded-full bg-white border border-rose-100/50 
+                      text-center text-xl font-bold tracking-[0.4em] text-slate-700 shadow-[0_4px_20px_rgba(251,113,133,0.08)]
+                      focus:outline-none focus:ring-2 focus:ring-rose-200 transition-all placeholder:tracking-normal
+                      ${shake ? 'border-red-300 ring-2 ring-red-100' : ''}
+                    `}
+                  />
+                </div>
+
+                {/* Error & Hint Area */}
+                <div className="h-16 mb-6 flex flex-col items-center justify-center w-full">
+                  <AnimatePresence mode="wait">
+                    {errorMessage ? (
+                      <motion.div 
+                        key="error"
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        className="text-center"
+                      >
+                        <p className="text-red-400 font-medium text-sm">{errorMessage}</p>
+                        <p className="text-[10px] text-rose-300 mt-1">The clock only opens for the girl who knows.</p>
+                      </motion.div>
+                    ) : (
+                       <motion.div key="spacer" className="h-full"></motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <button
+                  onClick={handleUnlock}
+                  className="w-full max-w-[280px] py-4 rounded-full bg-[#fca5a5] hover:bg-[#fb7185] text-white font-semibold shadow-lg shadow-rose-200/50 active:scale-95 transition-all duration-300"
+                >
+                  Unlock Our Story
+                </button>
+              </>
+            ) : (
+              <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+                className="mt-8 text-center"
+              >
+                <p className="text-xl font-serif text-slate-700">Welcome back, Safiyya.</p>
+                <p className="text-sm text-rose-400 mt-2 font-medium">Time has been waiting for you… 💞</p>
+              </motion.div>
+            )}
+          </motion.div>
+        </motion.div>
       );
     };
 
@@ -395,7 +519,6 @@
     );
 
     const CountdownGrid = ({ parts, isLive }) => {
-      // If live, show 00
       const displayParts = isLive 
         ? { months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 }
         : parts;
@@ -422,10 +545,8 @@
       const daysPassed = getDaysDifference(lastDate, now);
       const occurrences = countOccurrences(event, BASE_START_DATE, now);
 
-      // Formatting Date Logic
       let dateDisplay = "";
       if (event.dynamicDate && !isNaN(new Date(event.dynamicDate).getTime())) {
-         // Range +/- 1 Day
          const d = new Date(event.dynamicDate);
          const start = new Date(d); start.setDate(d.getDate() - 1);
          const end = new Date(d); end.setDate(d.getDate() + 1);
@@ -508,11 +629,159 @@
       );
     };
 
-    // --- MAIN APP COMPONENT ---
     const wrap = (min, max, v) => {
       const rangeSize = max - min;
       return ((((v - min) % rangeSize) + rangeSize) % rangeSize) + min;
     };
+
+    // --- MAIN CONTENT COMPONENT (Extracted for Stability) ---
+    const MainContent = ({ allEvents, status, timeParts, occurrenceCount, page, setPage, now }) => {
+      const eventIndex = wrap(0, allEvents.length, page);
+      const x = useMotionValue(0);
+      const inputRange = [-200, 0, 200];
+      const opacity = useTransform(x, inputRange, [0.5, 1, 0.5]);
+      const scale = useTransform(x, inputRange, [0.8, 1, 0.8]);
+
+      const paginate = (newDirection) => {
+        setPage(page + newDirection);
+      };
+
+      const displayEvent = status.activeEvent || allEvents[0];
+      const displayDate = status.isLive 
+           ? "Happening Now"
+           : getNextOccurrence(displayEvent, now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+      return (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1 }}
+            className="relative min-h-screen text-slate-800 font-sans selection:bg-rose-200 overflow-x-hidden"
+          >
+            <main className="relative z-10 w-full flex flex-col min-h-screen pb-6">
+              
+              <header className="pt-8 px-6 flex justify-center items-center max-w-2xl mx-auto w-full text-center">
+                 <div className="flex flex-col">
+                   <span className="font-serif italic text-2xl text-rose-500">Waqas & Safiyya</span>
+                   <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mt-1">Forever since 2025</span>
+                 </div>
+              </header>
+
+              <section className="mt-8 px-6 text-center max-w-2xl mx-auto w-full">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.8 }}
+                >
+                  <div className={`
+                    inline-flex items-center gap-2 px-3 py-1 rounded-full border mb-6 backdrop-blur-md shadow-sm transition-colors duration-300
+                    ${status.isLive ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white/40 border-white/50 text-slate-600'}
+                  `}>
+                    <span className="relative flex h-2 w-2">
+                      {status.isLive ? (
+                         <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
+                      ) : (
+                        <>
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                        </>
+                      )}
+                    </span>
+                    <span className="text-[11px] uppercase tracking-widest font-semibold">
+                      {status.isLive ? 'Live Event' : 'Up Next'}
+                    </span>
+                  </div>
+
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={displayEvent.id}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 1.05 }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      <h1 className="text-4xl sm:text-5xl font-serif text-slate-900 leading-tight mb-2">
+                        {displayEvent.title}
+                      </h1>
+                      <p className={`text-lg sm:text-xl font-light ${status.isLive ? 'text-red-500 font-medium' : 'text-slate-500'}`}>
+                        {displayDate}
+                      </p>
+                    </motion.div>
+                  </AnimatePresence>
+
+                  <CountdownGrid parts={timeParts} isLive={status.isLive} />
+
+                  <div className="mt-8 text-sm text-slate-500 bg-white/30 inline-block px-4 py-2 rounded-xl backdrop-blur-sm border border-white/40 shadow-sm">
+                     This will be the <span className="font-bold text-rose-500">{occurrenceCount}{getSuffix(occurrenceCount)}</span> time since our journey began.
+                  </div>
+                </motion.div>
+              </section>
+
+              <div className="flex-grow"></div>
+
+              <section className="mt-10 mb-8 w-full overflow-hidden">
+                <div className="px-6 mb-6 flex items-end justify-between max-w-2xl mx-auto w-full">
+                  <div>
+                    <h2 className="text-2xl font-serif text-slate-800">Our Memories</h2>
+                    <p className="text-xs uppercase tracking-widest text-slate-500 mt-1">Swipe for infinity</p>
+                  </div>
+                </div>
+
+                <div className="relative h-[500px] w-full flex items-center justify-center overflow-visible">
+                   <motion.div
+                      className="absolute z-20 cursor-grab active:cursor-grabbing touch-pan-y"
+                      style={{ x, opacity, scale }}
+                      drag="x"
+                      dragConstraints={{ left: 0, right: 0 }}
+                      dragElastic={0.2}
+                      onDragEnd={(e, { offset, velocity }) => {
+                        const swipe = Math.abs(offset.x) * velocity.x;
+                        if (swipe < -100 || offset.x < -100) {
+                          paginate(1);
+                        } else if (swipe > 100 || offset.x > 100) {
+                          paginate(-1);
+                        }
+                      }}
+                   >
+                      <TimelineCard event={allEvents[eventIndex]} isActive={true} />
+                   </motion.div>
+
+                   <div className="absolute z-10 opacity-40 scale-90 -translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
+                     <TimelineCard event={allEvents[wrap(0, allEvents.length, page - 1)]} isActive={false} />
+                   </div>
+                   <div className="absolute z-10 opacity-40 scale-90 translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
+                     <TimelineCard event={allEvents[wrap(0, allEvents.length, page + 1)]} isActive={false} />
+                   </div>
+                   
+                   <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none sm:hidden z-0 opacity-20">
+                     <ChevronLeftIcon size={32} />
+                     <ChevronRightIcon size={32} />
+                   </div>
+                </div>
+                
+                <div className="flex justify-center gap-2 mt-2">
+                  {allEvents.map((_, i) => (
+                    <div 
+                      key={i} 
+                      className={`h-1.5 rounded-full transition-all duration-300 ${i === eventIndex ? 'w-6 bg-rose-400' : 'w-1.5 bg-gray-300'}`}
+                    />
+                  ))}
+                </div>
+
+              </section>
+
+              <footer className="text-center pb-6 opacity-60">
+                 <div className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+                   <span>Made with</span>
+                   <HeartIcon className="w-3 h-3 text-rose-400 fill-rose-400" />
+                   <span>for Safiyya</span>
+                 </div>
+              </footer>
+
+            </main>
+          </motion.div>
+      );
+    }
 
     const App = () => {
       const [now, setNow] = useState(new Date());
@@ -521,6 +790,7 @@
       const [timeParts, setTimeParts] = useState({ months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 });
       const [page, setPage] = useState(0);
       const [isLoaded, setIsLoaded] = useState(false);
+      const [isLocked, setIsLocked] = useState(true);
 
       useEffect(() => {
         const init = async () => {
@@ -529,7 +799,6 @@
             const currentNow = new Date();
             const combined = [...STATIC_EVENTS, ...islamicEvents];
             
-            // Sort based on next occurrence
             combined.sort((a, b) => {
               const dateA = getNextOccurrence(a, currentNow);
               const dateB = getNextOccurrence(b, currentNow);
@@ -582,16 +851,6 @@
         ? countOccurrences(status.activeEvent, BASE_START_DATE, now) + (status.isLive ? 0 : 1)
         : 0;
 
-      const eventIndex = wrap(0, allEvents.length, page);
-      const x = useMotionValue(0);
-      const inputRange = [-200, 0, 200];
-      const opacity = useTransform(x, inputRange, [0.5, 1, 0.5]);
-      const scale = useTransform(x, inputRange, [0.8, 1, 0.8]);
-
-      const paginate = (newDirection) => {
-        setPage(page + newDirection);
-      };
-
       if (!isLoaded) {
          return (
            <div className="fixed inset-0 flex items-center justify-center bg-rose-50 text-rose-400">
@@ -605,138 +864,26 @@
          )
       }
 
-      // Safe access
-      const displayEvent = status.activeEvent || allEvents[0];
-      const displayDate = status.isLive 
-         ? "Happening Now"
-         : getNextOccurrence(displayEvent, now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-
       return (
-        <div className="relative min-h-screen text-slate-800 font-sans selection:bg-rose-200 overflow-x-hidden">
+        <>
           <Background />
-
-          <main className="relative z-10 w-full flex flex-col min-h-screen pb-6">
-            
-            <header className="pt-8 px-6 flex justify-center items-center max-w-2xl mx-auto w-full text-center">
-               <div className="flex flex-col">
-                 <span className="font-serif italic text-2xl text-rose-500">Waqas & Safiyya</span>
-                 <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mt-1">Forever since 2025</span>
-               </div>
-            </header>
-
-            <section className="mt-8 px-6 text-center max-w-2xl mx-auto w-full">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8 }}
-              >
-                <div className={`
-                  inline-flex items-center gap-2 px-3 py-1 rounded-full border mb-6 backdrop-blur-md shadow-sm transition-colors duration-300
-                  ${status.isLive ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white/40 border-white/50 text-slate-600'}
-                `}>
-                  <span className="relative flex h-2 w-2">
-                    {status.isLive ? (
-                       <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
-                    ) : (
-                      <>
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-                      </>
-                    )}
-                  </span>
-                  <span className="text-[11px] uppercase tracking-widest font-semibold">
-                    {status.isLive ? 'Live Event' : 'Up Next'}
-                  </span>
-                </div>
-
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={displayEvent.id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 1.05 }}
-                    transition={{ duration: 0.5 }}
-                  >
-                    <h1 className="text-4xl sm:text-5xl font-serif text-slate-900 leading-tight mb-2">
-                      {displayEvent.title}
-                    </h1>
-                    <p className={`text-lg sm:text-xl font-light ${status.isLive ? 'text-red-500 font-medium' : 'text-slate-500'}`}>
-                      {displayDate}
-                    </p>
-                  </motion.div>
-                </AnimatePresence>
-
-                <CountdownGrid parts={timeParts} isLive={status.isLive} />
-
-                <div className="mt-8 text-sm text-slate-500 bg-white/30 inline-block px-4 py-2 rounded-xl backdrop-blur-sm border border-white/40 shadow-sm">
-                   This will be the <span className="font-bold text-rose-500">{occurrenceCount}{getSuffix(occurrenceCount)}</span> time since our journey began.
-                </div>
-              </motion.div>
-            </section>
-
-            <div className="flex-grow"></div>
-
-            <section className="mt-10 mb-8 w-full overflow-hidden">
-              <div className="px-6 mb-6 flex items-end justify-between max-w-2xl mx-auto w-full">
-                <div>
-                  <h2 className="text-2xl font-serif text-slate-800">Our Memories</h2>
-                  <p className="text-xs uppercase tracking-widest text-slate-500 mt-1">Swipe for infinity</p>
-                </div>
-              </div>
-
-              <div className="relative h-[500px] w-full flex items-center justify-center overflow-visible">
-                 <motion.div
-                    className="absolute z-20 cursor-grab active:cursor-grabbing touch-pan-y"
-                    style={{ x, opacity, scale }}
-                    drag="x"
-                    dragConstraints={{ left: 0, right: 0 }}
-                    dragElastic={0.2}
-                    onDragEnd={(e, { offset, velocity }) => {
-                      const swipe = Math.abs(offset.x) * velocity.x;
-                      if (swipe < -100 || offset.x < -100) {
-                        paginate(1);
-                      } else if (swipe > 100 || offset.x > 100) {
-                        paginate(-1);
-                      }
-                    }}
-                 >
-                    <TimelineCard event={allEvents[eventIndex]} isActive={true} />
-                 </motion.div>
-
-                 <div className="absolute z-10 opacity-40 scale-90 -translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
-                   <TimelineCard event={allEvents[wrap(0, allEvents.length, page - 1)]} isActive={false} />
-                 </div>
-                 <div className="absolute z-10 opacity-40 scale-90 translate-x-[340px] hidden sm:block pointer-events-none transition-all duration-500">
-                   <TimelineCard event={allEvents[wrap(0, allEvents.length, page + 1)]} isActive={false} />
-                 </div>
-                 
-                 <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none sm:hidden z-0 opacity-20">
-                   <ChevronLeftIcon size={32} />
-                   <ChevronRightIcon size={32} />
-                 </div>
-              </div>
-              
-              <div className="flex justify-center gap-2 mt-2">
-                {allEvents.map((_, i) => (
-                  <div 
-                    key={i} 
-                    className={`h-1.5 rounded-full transition-all duration-300 ${i === eventIndex ? 'w-6 bg-rose-400' : 'w-1.5 bg-gray-300'}`}
-                  />
-                ))}
-              </div>
-
-            </section>
-
-            <footer className="text-center pb-6 opacity-60">
-               <div className="inline-flex items-center gap-1.5 text-xs text-slate-500">
-                 <span>Made with</span>
-                 <HeartIcon className="w-3 h-3 text-rose-400 fill-rose-400" />
-                 <span>for Safiyya</span>
-               </div>
-            </footer>
-
-          </main>
-        </div>
+          <AnimatePresence>
+            {isLocked ? (
+              <LockScreen key="lock" onUnlock={() => setIsLocked(false)} />
+            ) : (
+              <MainContent 
+                key="main"
+                allEvents={allEvents}
+                status={status}
+                timeParts={timeParts}
+                occurrenceCount={occurrenceCount}
+                page={page}
+                setPage={setPage}
+                now={now}
+              />
+            )}
+          </AnimatePresence>
+        </>
       );
     };
 
