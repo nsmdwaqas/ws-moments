@@ -72,6 +72,14 @@
     .mobile-bg {
       background: radial-gradient(circle at 50% 30%, #fff1f2 0%, #fff5f7 100%);
     }
+
+    /* Force Hardware Acceleration for Cards to prevent white screen */
+    .gpu-card {
+      -webkit-transform: translate3d(0, 0, 0);
+      transform: translate3d(0, 0, 0);
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
   </style>
 </head>
 <body>
@@ -300,7 +308,7 @@
           currentHijriYear = parseInt(gToHData.data.hijri.year);
         }
       } catch (e) {
-        console.warn("Hijri Year fetch failed, defaulting to 1446", e);
+        // Silent fail
       }
 
       const promises = ISLAMIC_CONFIG.map(async (config) => {
@@ -339,7 +347,6 @@
           };
 
         } catch (e) {
-          console.warn(`Failed to fetch ${config.id}, using fallback.`, e);
           const fallbackStr = FALLBACK_ISLAMIC_DATES[config.id];
           if (!fallbackStr) return null;
           let d = new Date(fallbackStr);
@@ -438,7 +445,7 @@
             </h1>
             
             <p className="text-slate-500 font-medium text-sm mb-10 px-4 leading-relaxed">
-              Type 4-digit birth code to unlock our countdown.
+              Type your 4-digit birth code to unlock our countdown.
             </p>
 
             {!isUnlocking ? (
@@ -556,23 +563,25 @@
         dateDisplay = "Loading...";
       }
       
-      // Removed complex transforms and will-change to prevent memory exhaustion
-      const activeClass = isActive 
-        ? 'bg-white/95 sm:bg-white/65 sm:backdrop-blur-xl shadow-[0_20px_50px_rgba(8,112,184,0.12)] scale-100 opacity-100 border-white/60' 
-        : 'bg-white/60 border-white/20 opacity-80 scale-95';
+      // EXTREME OPTIMIZATION: 
+      // Mobile = Solid Background (white/slate-50), No Blur, Standard Shadow.
+      // Desktop = Transparent, Blur, Glow Shadow.
+      const cardStyle = isActive 
+        ? 'bg-[#ffffff] sm:bg-white/65 sm:backdrop-blur-xl shadow-lg sm:shadow-[0_20px_50px_rgba(8,112,184,0.12)] border-rose-100 sm:border-white/60' 
+        : 'bg-[#ffffff] sm:bg-white/60 border-slate-100 sm:border-white/20 opacity-100 sm:opacity-80 scale-100 sm:scale-95';
 
       return (
         <div 
           className={`
-            relative w-full max-w-[340px] h-[480px] rounded-[40px] p-6 flex flex-col items-center text-center
+            gpu-card relative w-full max-w-[340px] h-[480px] rounded-[40px] p-6 flex flex-col items-center text-center
             border transition-all duration-300
-            ${activeClass}
+            ${cardStyle}
           `}
         >
           <div className={`
-            w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mb-6 shadow-lg shadow-rose-500/10
+            w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mb-6 shadow-md sm:shadow-lg sm:shadow-rose-500/10
             transition-transform duration-300
-            ${isActive ? 'bg-gradient-to-br from-white to-rose-50 scale-100' : 'bg-white/50 scale-90 grayscale'}
+            ${isActive ? 'bg-gradient-to-br from-rose-50 to-rose-100 sm:from-white sm:to-rose-50 scale-100' : 'bg-slate-50 sm:bg-white/50 scale-100 sm:scale-90 sm:grayscale'}
           `}>
             {event.icon}
           </div>
@@ -587,7 +596,7 @@
           </div>
 
           <div className="w-full grid grid-cols-2 gap-3 mt-auto">
-            <div className="col-span-2 bg-rose-50/50 rounded-2xl p-4 border border-rose-100/50">
+            <div className="col-span-2 bg-rose-50 rounded-2xl p-4 border border-rose-100">
                <div className="flex items-center justify-center gap-2 text-rose-400 mb-1">
                  <HourglassIcon size={14} />
                  <span className="text-[10px] uppercase tracking-widest font-bold">Countdown</span>
@@ -597,7 +606,7 @@
                </div>
             </div>
 
-            <div className="bg-white/40 rounded-2xl p-4 border border-white/50 flex flex-col justify-between">
+            <div className="bg-slate-50 sm:bg-white/40 rounded-2xl p-4 border border-slate-100 sm:border-white/50 flex flex-col justify-between">
                <div className="flex items-center justify-center gap-1.5 text-slate-400 mb-2">
                  <HistoryIcon size={14} />
                  <span className="text-[10px] uppercase tracking-wider font-semibold">Passed</span>
@@ -608,7 +617,7 @@
                </div>
             </div>
 
-            <div className="bg-white/40 rounded-2xl p-4 border border-white/50 flex flex-col justify-between">
+            <div className="bg-slate-50 sm:bg-white/40 rounded-2xl p-4 border border-slate-100 sm:border-white/50 flex flex-col justify-between">
                <div className="flex items-center justify-center gap-1.5 text-slate-400 mb-2">
                  <RotateCwIcon size={14} />
                  <span className="text-[10px] uppercase tracking-wider font-semibold">Occurred</span>
