@@ -238,20 +238,40 @@
 
     const countOccurrences = (ev, base, now) => {
       if (!ev) return 0;
-      let c = 0;
-      let y = base.getFullYear();
-      let safety = 0;
-      if (ev.dynamicDate) {
-         return Math.max(0, now.getFullYear() - base.getFullYear());
+      
+      // Handle Static Events
+      if (!ev.dynamicDate) {
+        let c = 0;
+        let y = base.getFullYear();
+        let safety = 0;
+        while (safety < 1000) {
+          const d = new Date(y, ev.month - 1, ev.day, ev.hour || 0, ev.minute || 0, 0);
+          if (d > now) break;
+          if (d >= base) c++;
+          y++;
+          safety++;
+        }
+        return c;
       }
-      while (safety < 1000) {
-        const d = new Date(y, ev.month - 1, ev.day, ev.hour || 0, ev.minute || 0, 0);
-        if (d > now) break;
-        if (d >= base) c++;
-        y++;
+
+      // Handle Dynamic Events (Islamic) via Approximation
+      let count = 0;
+      let cursor = new Date(ev.dynamicDate);
+      
+      // If the dynamic date is in the future, step back to the most recent potential occurrence
+      if (cursor > now) {
+         cursor.setDate(cursor.getDate() - 354);
+      }
+      
+      let safety = 0;
+      // Iterate backwards by lunar years
+      while (cursor >= base && safety < 100) {
+        count++;
+        cursor.setDate(cursor.getDate() - 354);
         safety++;
       }
-      return c;
+      
+      return count;
     };
 
     const calculateTimeParts = (target, now) => {
