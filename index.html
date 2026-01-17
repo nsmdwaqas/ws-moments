@@ -1,9 +1,8 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Waqas & Safiyya Moments</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💞</text></svg>">
   
@@ -38,11 +37,35 @@
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
   
-  <!-- React & Framer Motion from CDN -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+  <!-- Error Handling Style -->
+  <style>
+    #error-display { display: none; padding: 20px; color: #ef4444; background: #fff; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; overflow: auto; }
+    #root-loading { display: flex; align-items: center; justify-content: center; height: 100vh; color: #fda4af; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="error-display"></div>
+  
+  <div id="root">
+    <div id="root-loading">
+      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-bounce"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+    </div>
+  </div>
+
+  <script>
+    window.onerror = function(msg, url, line, col, error) {
+      var el = document.getElementById('error-display');
+      el.style.display = 'block';
+      el.innerHTML = '<h3>Something went wrong</h3><pre>' + msg + '\nLine: ' + line + '</pre><p>Please try refreshing the page.</p>';
+      return false;
+    };
+  </script>
+
+  <!-- High Availability CDNs (JSDelivr) -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js" crossorigin></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.8/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/framer-motion@10.18.0/dist/framer-motion.js"></script>
 
   <style>
     body {
@@ -52,6 +75,7 @@
       -webkit-font-smoothing: antialiased;
       -webkit-tap-highlight-color: transparent;
       overflow-x: hidden;
+      padding-bottom: env(safe-area-inset-bottom);
     }
     
     .glass-panel {
@@ -61,40 +85,37 @@
       border: 1px solid rgba(255, 255, 255, 0.6);
     }
     
-    /* Specific Lock Screen Styles */
     .lock-input::placeholder {
       color: #cbd5e1;
       font-weight: 400;
       letter-spacing: normal;
     }
 
-    /* Mobile Background Fallback (Lightweight) */
     .mobile-bg {
       background: radial-gradient(circle at 50% 30%, #fff1f2 0%, #fff5f7 100%);
+      min-height: 100vh;
+      min-height: 100dvh;
     }
     
-    /* Optimized Card Layering */
     .card-layer {
-      /* Replaced transform hack with just backface visibility */
       backface-visibility: hidden;
       -webkit-backface-visibility: hidden;
-      /* Ensure touch events work */
       touch-action: pan-y; 
+      transform: translateZ(0);
     }
   </style>
-</head>
-<body>
-  <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo, memo } = React;
     
-    // Safety check for Framer Motion
+    // Robust Fallback for Framer Motion
     const MotionLib = window.Motion || window.framerMotion;
     const { motion, AnimatePresence, useMotionValue, useTransform } = MotionLib || { 
-      motion: { div: 'div' }, 
+      motion: new Proxy({}, {
+        get: (target, prop) => (props) => React.createElement(prop, props, props.children)
+      }),
       AnimatePresence: ({children}) => children,
-      useMotionValue: () => ({ get: () => 0, set: () => {}, onChange: () => {} }),
+      useMotionValue: (v) => ({ get: () => v, set: () => {}, onChange: () => {} }),
       useTransform: () => 0
     };
 
@@ -318,12 +339,53 @@
       return { activeEvent: bestEvent, isLive: false, targetDate: bestStart };
     };
 
+    // Helper: Safe fetch with timeout
+    const fetchWithTimeout = async (url, options = {}) => {
+      const { timeout = 4000 } = options; 
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeout);
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal
+        });
+        clearTimeout(id);
+        return response;
+      } catch (error) {
+        clearTimeout(id);
+        throw error;
+      }
+    };
+
+    const getInitialEvents = () => {
+       const now = new Date();
+       const islamic = ISLAMIC_CONFIG.map(config => {
+          const fallbackStr = FALLBACK_ISLAMIC_DATES[config.id];
+          let d = new Date(fallbackStr);
+          d.setHours(9, 0, 0, 0);
+          
+          if (d < now && getDaysDifference(d, now) > 30) {
+             d.setDate(d.getDate() + 354);
+          }
+
+          return { ...config, dynamicDate: d, hour: 9, minute: 0 };
+       });
+       
+       const combined = [...STATIC_EVENTS, ...islamic];
+       combined.sort((a, b) => {
+          const dateA = getNextOccurrence(a, now);
+          const dateB = getNextOccurrence(b, now);
+          return dateA.getTime() - dateB.getTime();
+       });
+       return combined;
+    };
+
     const fetchIslamicEvents = async () => {
       const today = new Date();
       let currentHijriYear = 1446;
 
       try {
-        const gToHRes = await fetch(`https://api.aladhan.com/v1/gToH?date=${pad2(today.getDate())}-${pad2(today.getMonth() + 1)}-${today.getFullYear()}`);
+        const gToHRes = await fetchWithTimeout(`https://api.aladhan.com/v1/gToH?date=${pad2(today.getDate())}-${pad2(today.getMonth() + 1)}-${today.getFullYear()}`, { timeout: 2000 });
         if (gToHRes.ok) {
           const gToHData = await gToHRes.json();
           currentHijriYear = parseInt(gToHData.data.hijri.year);
@@ -335,7 +397,7 @@
       const promises = ISLAMIC_CONFIG.map(async (config) => {
         try {
           const targetHijriDate = `${pad2(config.hijriDay)}-${pad2(config.hijriMonth)}-${currentHijriYear}`;
-          let res = await fetch(`https://api.aladhan.com/v1/hToG?date=${targetHijriDate}`);
+          let res = await fetchWithTimeout(`https://api.aladhan.com/v1/hToG?date=${targetHijriDate}`, { timeout: 2000 });
           
           if (!res.ok) throw new Error(`API error for ${config.id}`);
           let data = await res.json();
@@ -347,10 +409,9 @@
           eventEndBuffer.setDate(eventEndBuffer.getDate() + 1);
           eventEndBuffer.setHours(23, 59, 59);
 
-          // If date has passed for this Hijri year, fetch next year
           if (eventEndBuffer < today) {
              const nextHijriDate = `${pad2(config.hijriDay)}-${pad2(config.hijriMonth)}-${currentHijriYear + 1}`;
-             res = await fetch(`https://api.aladhan.com/v1/hToG?date=${nextHijriDate}`);
+             res = await fetchWithTimeout(`https://api.aladhan.com/v1/hToG?date=${nextHijriDate}`, { timeout: 2000 });
              if (res.ok) {
                 data = await res.json();
                 const [dNext, mNext, yNext] = data.data.gregorian.date.split('-');
@@ -368,17 +429,7 @@
           };
 
         } catch (e) {
-          const fallbackStr = FALLBACK_ISLAMIC_DATES[config.id];
-          if (!fallbackStr) return null;
-          let d = new Date(fallbackStr);
-          d.setHours(9,0,0,0);
-          
-          const now = new Date();
-          if (d < now) {
-             d.setDate(d.getDate() + 354);
-          }
-
-          return { ...config, dynamicDate: d, hour: 9, minute: 0 };
+          return null;
         }
       });
 
@@ -387,17 +438,18 @@
     };
 
     // --- COMPONENTS ---
-    // Pure Component for Background to avoid unnecessary re-renders
     const Background = memo(() => {
       return (
         <div className="fixed inset-0 w-full h-full -z-10 mobile-bg">
           <div className="hidden sm:block absolute inset-0 overflow-hidden">
             <motion.div 
+              style={{ willChange: "transform" }}
               animate={{ y: [0, -40, 0], x: [0, 20, 0], scale: [1, 1.1, 1] }}
               transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
               className="absolute -top-20 -left-20 w-96 h-96 bg-rose-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-40"
             />
             <motion.div 
+              style={{ willChange: "transform" }}
               animate={{ y: [0, 50, 0], x: [0, -30, 0], scale: [1, 1.2, 1] }}
               transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 1 }}
               className="absolute -bottom-32 -right-32 w-[30rem] h-[30rem] bg-pink-100 rounded-full mix-blend-multiply filter blur-[80px] opacity-50"
@@ -558,14 +610,10 @@
       );
     });
 
-    // Memoized Card Component to prevent internal re-renders
     const TimelineCard = memo(({ event, isActive }) => {
       if (!event) return null;
       
       const now = new Date();
-      // NOTE: We calculate these ONCE per render. 
-      // Since TimelineCard is memoized, it won't re-render every second unless `isActive` or `event` changes.
-      // This is crucial for fixing the "flickering" issue.
       const nextDate = getNextOccurrence(event, now);
       const lastDate = getLastOccurrence(event, now);
       const daysUntil = getDaysDifference(now, nextDate);
@@ -585,7 +633,6 @@
         dateDisplay = "Loading...";
       }
 
-      // Styles: Solid opaque background for mobile to fix rendering bug
       const cardStyle = isActive 
         ? 'bg-[#ffffff] sm:bg-white/65 sm:backdrop-blur-xl shadow-lg sm:shadow-[0_20px_50px_rgba(8,112,184,0.12)] border-rose-100 sm:border-white/60' 
         : 'bg-[#ffffff] sm:bg-white/60 border-slate-100 sm:border-white/20 opacity-100 sm:opacity-80 scale-100 sm:scale-95';
@@ -664,9 +711,6 @@
       return ((((v - min) % rangeSize) + rangeSize) % rangeSize) + min;
     };
 
-    // --- NEW: VIRTUAL SLIDER CAROUSEL (AnimatePresence) ---
-    // This architecture creates a FRESH component on every slide,
-    // which fixes the "Blank/Stuck" card issue on mobile browsers.
     const variants = {
       enter: (direction) => ({
         x: direction > 0 ? 300 : -300,
@@ -689,11 +733,9 @@
     };
 
     const MemoryCarousel = memo(({ allEvents, page, setPage }) => {
-      // We track direction to know if we should slide left or right
       const prevPage = useRef(page);
       const direction = page > prevPage.current ? 1 : -1;
       
-      // Update ref after render logic
       if (page !== prevPage.current) {
          prevPage.current = page;
       }
@@ -745,14 +787,12 @@
       );
     });
 
-    // --- MAIN CONTENT COMPONENT ---
-    const MainContent = ({ allEvents, status, timeParts, occurrenceCount, page, setPage, now }) => {
+    const MainContent = memo(({ allEvents, status, timeParts, occurrenceCount, page, setPage, now }) => {
       const displayEvent = status.activeEvent || allEvents[0];
       const displayDate = status.isLive 
            ? "Happening Now"
            : getNextOccurrence(displayEvent, now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-      // Calculate index purely for the dots indicator
       const eventIndex = wrap(0, allEvents.length, page);
 
       return (
@@ -831,8 +871,6 @@
                   </div>
                 </div>
 
-                {/* --- ISOLATED SWIPE CAROUSEL --- */}
-                {/* This uses React.memo so it won't re-render with timer ticks */}
                 <MemoryCarousel allEvents={allEvents} page={page} setPage={setPage} />
                 
                 <div className="flex justify-center gap-2 mt-2">
@@ -857,11 +895,11 @@
             </main>
           </motion.div>
       );
-    }
+    });
 
     const App = () => {
+      const [allEvents, setAllEvents] = useState(getInitialEvents);
       const [now, setNow] = useState(new Date());
-      const [allEvents, setAllEvents] = useState(STATIC_EVENTS);
       const [status, setStatus] = useState({ activeEvent: null, isLive: false, targetDate: null });
       const [timeParts, setTimeParts] = useState({ months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 });
       const [page, setPage] = useState(0);
@@ -869,40 +907,44 @@
       const [isLocked, setIsLocked] = useState(true);
 
       useEffect(() => {
+        let isMounted = true;
+
+        setTimeout(() => {
+            if (isMounted) setIsLoaded(true);
+        }, 1500);
+
         const init = async () => {
-          try {
-            const islamicEvents = await fetchIslamicEvents();
-            const currentNow = new Date();
-            const combined = [...STATIC_EVENTS, ...islamicEvents];
-            
-            combined.sort((a, b) => {
-              const dateA = getNextOccurrence(a, currentNow);
-              const dateB = getNextOccurrence(b, currentNow);
-              return dateA.getTime() - dateB.getTime();
-            });
-            
-            setAllEvents(combined);
+           const currentNow = new Date();
+           const st = getStatus(allEvents, currentNow);
+           setStatus(st);
+           
+           if(st.targetDate && !st.isLive) {
+             setTimeParts(calculateTimeParts(st.targetDate, currentNow));
+           }
 
-            const st = getStatus(combined, currentNow);
-            setStatus(st);
-            
-            if(st.targetDate && !st.isLive) {
-              setTimeParts(calculateTimeParts(st.targetDate, currentNow));
-            } else {
-              setTimeParts({ months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 });
-            }
+           if (st.activeEvent) {
+             const idx = allEvents.findIndex(e => e.id === st.activeEvent.id);
+             if (idx !== -1) setPage(idx);
+           }
 
-            if (st.activeEvent) {
-              const idx = combined.findIndex(e => e.id === st.activeEvent.id);
-              if (idx !== -1) setPage(idx);
-            }
-          } catch(err) {
-            console.error("Initialization error", err);
-          } finally {
-            setIsLoaded(true);
-          }
+           try {
+              const liveIslamicEvents = await fetchIslamicEvents();
+              if (liveIslamicEvents && liveIslamicEvents.length > 0 && isMounted) {
+                  const combined = [...STATIC_EVENTS, ...liveIslamicEvents];
+                  combined.sort((a, b) => {
+                    const dateA = getNextOccurrence(a, currentNow);
+                    const dateB = getNextOccurrence(b, currentNow);
+                    return dateA.getTime() - dateB.getTime();
+                  });
+                  setAllEvents(combined);
+              }
+           } catch(err) {
+              console.log("Background update failed, keeping fallback data");
+           }
         };
+
         init();
+        return () => { isMounted = false; };
       }, []);
 
       useEffect(() => {
